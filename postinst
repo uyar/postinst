@@ -482,7 +482,7 @@ def install_spotify(*, ask=True):
     logging.info("   -- INSTALLING SPOTIFY")
     if ask and not(yes_no("install spotify")):
         return
-    install(["kdocker"], ask=False)
+    install(["kdocker"])
     install_external("spotify-client", ask=False)
     menu_file = MENU_DIR / "spotify.desktop"
     if not contains("kdocker", menu_file):
@@ -583,7 +583,7 @@ TASKS.update({
 
 TASKS_ORDER = [
     "unneeded", "base", "basics",
-    "xbasics", "infinality", "keymaps", "natural-scrolling",
+    "xbasics", "infinality", "tr-keymaps", "natural-scrolling",
     "security", "cryptomator",
     "utils", "tilda", "typecatcher", "foliate", "madedit-mod",
     "network", "hosts", "tor", "palemoon", "ungoogled-chromium", "owncloud-client",
@@ -593,17 +593,16 @@ TASKS_ORDER = [
     "office", "latex",
     "media", "media-utils", "spotify-client", "kdenlive",
     "games",
-    "devel", "libs", "nodejs", "yq", "vscode", "insomnia", "httptoolkit",
+    "devel", "libs", "nodejs", "yq", "code", "insomnia", "httptoolkit",
 ]
 
 TASKS_DISABLED = {
-    "games", "libs",
     "infinality", "kdenlive",
     "signal-desktop", "element-desktop", "zoom",
-    "spotify-client",
     "insomnia", "httptoolkit",
-    "owncloud-client",  # depends on 21.04
-    "nodejs",  # depends on impish
+    "qbittorrent",  # can't be installed
+    "owncloud-client",  # can't be installed
+    "spotify-client",  # can't be installed
 }
 
 if any(t not in TASKS for t in arguments.tasks):

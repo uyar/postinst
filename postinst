@@ -1,0 +1,634 @@
+#!/bin/env python3
+
+import json
+import logging
+import re
+import subprocess
+import sys
+from argparse import ArgumentParser
+from functools import partial
+from itertools import filterfalse, tee
+from pathlib import Path
+from urllib.request import urlopen
+
+
+########################################################
+#                                                      #
+#   DIRECTORIES                                        #
+#                                                      #
+########################################################
+
+
+THIS_DIR = Path(__file__).parent
+
+INST_DIR = Path("/usr")
+EXEC_DIR = INST_DIR / "bin"
+SHARE_DIR = INST_DIR / "share"
+MENU_DIR = SHARE_DIR / "applications"
+ICON_DIR = SHARE_DIR / "icons"
+OPT_DIR = Path("/opt")
+
+APT_DIR = Path("/etc/apt")
+APT_SRC_DIR = APT_DIR / "sources.list.d"
+APT_GPG_DIR = APT_DIR / "trusted.gpg.d"
+
+SOFT_DIR = Path.home() / "Public" / "Software" / "Linux"
+PKGS_DIR = SOFT_DIR / "Ubuntu"
+BIN_DIR = SOFT_DIR / "Binary"
+
+
+########################################################
+#                                                      #
+#   UTILITY FUNCTIONS                                  #
+#                                                      #
+########################################################
+
+
+def partition(f, xs):
+    t1, t2 = tee(xs)
+    return list(filter(f, t1)), list(filterfalse(f, t2))
+
+
+def yes_no(prompt, default="y"):
+    legend = "Y/n/q" if default.lower() == "y" else "y/N/q"
+    response = input(f"Do you want to {prompt} ({legend})? ").strip().lower()
+    if response == "":
+        response = default.lower()
+    if response in {"q", "quit"}:
+        sys.exit()
+    return response in {"y", "yes"}
+
+
+def run(command, *, sudo=False):
+    if sudo:
+        command = f"sudo {command}"
+    logging.info(f"{command}")
+    if DRY_RUN:
+        return
+    process = subprocess.run(command, shell=True, capture_output=not VERBOSE)
+    if process.returncode != 0:
+        raise RuntimeError(process.stderr if not VERBOSE else "")
+
+
+def contains(pattern, files):
+    process = subprocess.run(f"grep -q '{pattern}' {files}", shell=True)
+    return process.returncode == 0
+
+
+def cat(path, content, *, append=False, mode=None, sudo=False):
+    command1 = f"echo {content}"
+    command2 = f"tee {path}" if not append else f"tee -a {path}"
+    if sudo:
+        command2 = f"sudo {command2}"
+    run(f"{command1} | {command2} > /dev/null")
+    if (not append) and (mode is not None):
+        run(f"chmod {mode} {path}", sudo=sudo)
+
+
+def patch(orig, diff, *, strip=None, sudo=False):
+    command1 = f"zcat {diff}"
+    command2 = f"patch {orig}" if not Path(orig).is_dir() else f"patch -d {orig}"
+    if strip is not None:
+        command2 = f"{command2} -p {strip}"
+    if sudo:
+        command2 = f"sudo {command2}"
+    run(f"{command1} | {command2}")
+
+
+def copy(src, dst, *, move=False, link=False, mode=None, sudo=False):
+    if move:
+        run(f"mv {src} {dst}", sudo=sudo)
+    elif link:
+        run(f"ln -s {src} {dst}", sudo=sudo)
+    else:
+        run(f"cp {src} {dst}", sudo=sudo)
+    if (not link) and (mode is not None):
+        run(f"chmod {mode} {dst}", sudo=sudo)
+
+
+def extract(archive, dst, *, sudo=False):
+    command = f"tar -x --no-same-owner -C {dst} --file {archive}"
+    run(command, sudo=sudo)
+
+
+def fetch(url, dst, *, gpg=False, mode=None, sudo=False):
+    command1 = f"curl -sSL {url}"
+    command2 = f"tee {dst} > /dev/null"
+    if sudo:
+        command2 = f"sudo {command2}"
+    if gpg:
+        run(f"{command1} | gpg --dearmor | {command2}")
+    else:
+        run(f"{command1} | {command2}")
+    if mode is not None:
+        run(f"chmod {mode} {dst}", sudo=sudo)
+
+
+def local_version(executable, prefix=""):
+    try:
+        p = subprocess.run([executable, "--version"], capture_output=True)
+        return p.stdout.decode().strip().split(" ")[-1][len(prefix):]
+    except FileNotFoundError:
+        return None
+
+
+def github_release(repo):
+    url = f"https://github.com/{repo}/"
+    with urlopen(url) as c:
+        content = c.read().decode()
+    match = re.search(r"/releases/tag/v([0-9.]+)", content)
+    return match.group(1)
+
+
+########################################################
+#                                                      #
+#   PACKAGE FUNCTIONS                                  #
+#                                                      #
+########################################################
+
+
+def installed(package):
+    command = "dpkg-query -W -f='${Status}' " + package
+    process = subprocess.run(command, shell=True, capture_output=True)
+    return b"install ok installed" in process.stdout
+
+
+def install(packages):
+    exclude, include = partition(installed, packages)
+    if len(exclude) > 0:
+        logging.info(f"   -- already installed: {' '.join(exclude)}")
+    if len(include) == 0:
+        logging.info("   -- nothing to install")
+    else:
+        run(f"apt install --no-install-recommends {' '.join(include)}", sudo=True)
+
+
+def uninstall(packages):
+    include, exclude = partition(installed, packages)
+    if len(exclude) > 0:
+        logging.info(f"   -- already not installed: {' '.join(exclude)}")
+    if len(include) == 0:
+        logging.info("   -- nothing to uninstall")
+    else:
+        run(f"apt purge --auto-remove {' '.join(include)}", sudo=True)
+
+
+def add_apt_repo(package, repo, *, repo_key=None):
+    if repo_key is not None:
+        logging.info(f"   -- ADDING REPOSITORY KEY: {repo_key}")
+        key_file = APT_GPG_DIR / f"{package}.gpg"
+        if key_file.exists():
+            logging.info("   -- already added")
+        else:
+            fetch(repo_key, key_file, gpg=True, mode="644", sudo=True)
+
+    logging.info(f"   -- ADDING REPOSITORY: {repo}")
+    if repo.startswith("ppa:"):
+        repo_name = repo.split("ppa:")[1]
+        if contains(repo_name, f"{APT_SRC_DIR}/*"):
+            logging.info("   -- already added")
+        else:
+            run(f"add-apt-repository -P {repo}", sudo=True)
+    elif repo.startswith("deb "):
+        repo_name = repo[repo.find("http"):]
+        if contains(repo_name, f"{APT_SRC_DIR}/*"):
+            logging.info("   -- already added")
+        else:
+            list_file = f"{APT_SRC_DIR}/{package}.list"
+            cat(list_file, repo, mode="644", sudo=True)
+            refresh(ask=False)
+
+
+def add_alternative(generic, name, path, priority):
+    run(f"update-alternatives --install {generic} {name} {path} {priority}", sudo=True)
+
+
+########################################################
+#                                                      #
+#   TASKS                                              #
+#                                                      #
+########################################################
+
+
+def refresh(*, ask=True):
+    logging.info("-- UPDATING PACKAGE DATA")
+    if ask and not(yes_no("update package data")):
+        return
+    run("apt update", sudo=True)
+
+
+def upgrade(*, ask=True):
+    logging.info("-- UPGRADING PACKAGES")
+    if ask and not(yes_no("upgrade all packages")):
+        return
+    run("apt upgrade", sudo=True)
+
+
+def install_category(category, *, ask=True):
+    logging.info(f"-- INSTALLING CATEGORY: {category.upper()}")
+    if ask and not(yes_no(f"install the '{category}' category")):
+        return
+    packages = PACKAGES[category].get("_all", [])
+    packages.extend(PACKAGES[category].get("desktop", {}).get(DESKTOP, []))
+    install(packages)
+
+
+def uninstall_category(category, *, ask=True):
+    logging.info(f"-- UNINSTALLING CATEGORY: {category.upper()}")
+    if ask and not(yes_no(f"uninstall the '{category}' category")):
+        return
+    packages = PACKAGES[category].get("_all", [])
+    packages.extend(PACKAGES[category].get("desktop", {}).get(DESKTOP, []))
+    uninstall(packages)
+
+
+def install_external(package, *, ask=True):
+    logging.info(f"-- INSTALLING EXTERNAL PACKAGE: {package.upper()}")
+    if ask and not(yes_no(f"install the '{package}' package")):
+        return
+    data = EXTERNAL_PACKAGES[package]
+    add_apt_repo(package, data["repo"], repo_key=data.get("key"))
+    install([package])
+
+
+def install_file(package, *, ask=True):
+    logging.info(f"-- INSTALLING FILE PACKAGE: {package.upper()}")
+    if ask and not(yes_no(f"install the '{package}' package")):
+        return
+    if installed(package):
+        logging.info("   -- already installed")
+    else:
+        path = PKGS_DIR / FILE_PACKAGES[package]
+        run(f"apt install --no-install-recommends {path}", sudo=True)
+
+
+########################################################
+#                                                      #
+#   SPECIAL TASKS                                      #
+#                                                      #
+########################################################
+
+
+def set_tr_keymaps(*, ask=True):
+    xkb_dir = Path("/usr/share/X11/xkb")
+    xkb_tr = xkb_dir / "symbols" / "tr"
+
+    logging.info("   -- CHANGING KEYMAP: TR (SLASH)")
+    if (not ask) or yes_no("change the tr keymap for slash"):
+        if contains("AB10.*slash", xkb_tr):
+            logging.info("   -- already changed")
+        else:
+            patch(xkb_tr, THIS_DIR / "xkb-tr-slash.patch.gz", sudo=True)
+
+    logging.info("   -- ADDING KEYMAP: TR(TYPEWRITER)")
+    if (not ask) or yes_no("add the tr(typewriter) keymap"):
+        if contains("typewriter", xkb_tr):
+            logging.info("   -- already added")
+        else:
+            patch(xkb_dir, THIS_DIR / "xkb-tr-typewriter.patch.gz", strip=1, sudo=True)
+
+
+def set_natural_scrolling(*, ask=True):
+    logging.info("   -- SETTING NATURAL SCROLLING")
+    if ask and not(yes_no("set natural scrolling")):
+        return
+    conf_file = Path("/usr/share/X11/xorg.conf.d/40-libinput.conf")
+    if contains("NaturalScrolling", conf_file):
+        logging.info("   -- already set")
+    else:
+        patch(conf_file, THIS_DIR / "libinput.conf.patch.gz", sudo=True)
+
+
+def install_infinality(*, ask=True):
+    logging.info("   -- INSTALLING INFINALITY FONTCONFIG")
+    if ask and not(yes_no("install infinality fontconfig")):
+        return
+    # install_external("fontconfig-infinality", ask=ask)
+    install_file("fontconfig-infinality", ask=False)
+    # FIXME: repeated setstyle
+    run("echo 3 | sudo /etc/fonts/infinality/infctl.sh setstyle")
+
+
+def install_tilda(*, ask=True):
+    logging.info("   -- INSTALLING TILDA")
+    if ask and not(yes_no("install tilda")):
+        return
+    install(["tilda"])
+    menu_file = MENU_DIR / "tilda.desktop"
+    if not contains("Comment=", menu_file):
+        comment = "Comment=A drop-down terminal emulator."
+        cat(menu_file, comment, append=True, sudo=True)
+
+
+def install_typecatcher(*, ask=True):
+    logging.info("   -- INSTALLING TYPECATCHER")
+    if ask and not(yes_no("install typecatcher")):
+        return
+    install(["typecatcher"])
+    builder_file = Path("/usr/lib/python3/dist-packages/typecatcher_lib/Builder.py")
+    if not contains("tree.getiterator", builder_file):
+        logging.info("   -- already fixed")
+    else:
+        run(f"sed -i 's/tree.getiterator/tree.iter/' {builder_file} > /dev/null", sudo=True)
+
+
+def install_hosts(*, ask=True):
+    logging.info("   -- INSTALLING HOSTS BLACKLIST")
+    if ask and not(yes_no("install hosts blacklist")):
+        return
+    cron_file = Path("/etc/cron.daily/update-hosts")
+    if cron_file.exists():
+        logging.info("   -- already installed")
+    else:
+        install(["python3-lxml", "python3-bs4"])
+        copy(THIS_DIR / "update-hosts", cron_file, mode="755", sudo=True)
+    if not Path("/var/local/hosts").exists():
+        run(cron_file, sudo=True)
+
+
+def install_tor(*, ask=True):
+    logging.info("   -- INSTALLING TOR with TINYPROXY")
+    if ask and not(yes_no("install tor")):
+        return
+    install(["tor", "tinyproxy"])
+    config = Path("/etc/tinyproxy/tinyproxy.conf")
+    restart = False
+    if not contains('^upstream socks5', config):
+        cat(config, "upstream socks5 127.0.0.1:9050", append=True, sudo=True)
+        restart = True
+    if not contains('^LogFile "/dev/null"', config):
+        run(f"sed -i 's/^LogFile .*/LogFile \"\/dev\/null\"/' {config}", sudo=True)
+        restart = True
+    if restart:
+        run("systemctl restart tinyproxy", sudo=True)
+
+
+def install_palemoon(*, ask=True, priority=100):
+    logging.info("   -- INSTALLING PALE MOON")
+    if ask and not(yes_no("install palemoon")):
+        return
+
+    app_dir = OPT_DIR / "palemoon"
+    if app_dir.exists():
+        logging.info("   -- already extracted")
+    else:
+        files = list(BIN_DIR.glob("palemoon*.tar.*"))
+        extract(files[-1], app_dir.parent, sudo=True)
+
+    executable = EXEC_DIR / "palemoon"
+    if not executable.exists():
+        copy(app_dir / "palemoon", executable, link=True, sudo=True)
+        add_alternative("/usr/bin/x-www-browser", "x-www-browser", executable, priority)
+
+    icon_file = ICON_DIR / "palemoon.png"
+    if not icon_file.exists():
+        copy(app_dir / "browser" / "icons" / "mozicon128.png", icon_file, link=True, sudo=True)
+
+    menu_file = MENU_DIR / "palemoon.desktop"
+    if not menu_file.exists():
+        copy(THIS_DIR / "palemoon.desktop", menu_file, sudo=True)
+
+
+def install_ungoogled_chromium(*, ask=True, priority=200):
+    logging.info("   -- INSTALLING UNGOOGLED CHROMIUM")
+    if ask and not(yes_no("install ungoogled chromium")):
+        return
+
+    app_dir = OPT_DIR / "ungoogled-chromium"
+    if app_dir.exists():
+        logging.info("   -- already extracted")
+    else:
+        files = list(BIN_DIR.glob("ungoogled-chromium*.tar.*"))
+        extract(files[-1], app_dir.parent, sudo=True)
+        run(f"mv {app_dir}* {app_dir}", sudo=True)
+
+    executable = EXEC_DIR / "chromium"
+    if not executable.exists():
+        # install_appimage("ungoogled-chromium", executable)
+        copy(app_dir / "chrome", executable, link=True, sudo=True)
+        add_alternative("/usr/bin/x-www-browser", "x-www-browser", executable, priority)
+
+    icon_file = ICON_DIR / "chromium.png"
+    if not icon_file.exists():
+        copy(app_dir / "product_logo_48.png", icon_file, link=True, sudo=True)
+
+    menu_file = MENU_DIR / "chromium.desktop"
+    if not menu_file.exists():
+        copy(THIS_DIR / "ungoogled-chromium.desktop", menu_file, sudo=True)
+
+
+def install_owncloud_client(*, ask=True):
+    logging.info("   -- INSTALLING OWNCLOUD CLIENT")
+    if ask and not(yes_no("install owncloud-client")):
+        return
+    install_external("owncloud-client", ask=False)
+    menu_file = MENU_DIR / "owncloud.desktop"
+    if not contains("Network", menu_file):
+        run(f"sed -i 's/=Utility/=Network/' {menu_file} > /dev/null", sudo=True)
+
+
+def install_wormhole_william(*, ask=True):
+    logging.info("   -- INSTALLING WORMHOLE WILLIAM")
+    if ask and not(yes_no("install wormhole-william")):
+        return
+    latest_release = github_release("psanford/wormhole-william")
+    if local_version("wormhole-william", prefix="v") == latest_release:
+        logging.info("   -- already installed")
+    else:
+        url = f"https://github.com/psanford/wormhole-william/releases/download/v{latest_release}/wormhole-william-linux-amd64"
+        fetch(url, dst=EXEC_DIR / "wormhole-william", mode="755", sudo=True)
+
+
+def install_youtube_dl(*, ask=True):
+    logging.info("   -- INSTALLING YOUTUBE-DL")
+    if ask and not(yes_no("install youtube-dl")):
+        return
+    executable = EXEC_DIR / "youtube-dl"
+    if executable.exists():
+        logging.info("   -- already installed, checking for updates")
+        run("youtube-dl -U", sudo=True)
+    else:
+        url = "https://yt-dl.org/downloads/latest/youtube-dl"
+        fetch(url, dst=executable, mode="755", sudo=True)
+
+
+def install_signal(*, ask=True):
+    logging.info("   -- INSTALLING SIGNAL")
+    if ask and not(yes_no("install signal")):
+        return
+    install_external("signal-desktop", ask=False)
+    menu_file = MENU_DIR / "signal-desktop.desktop"
+    if not contains("use-tray-icon", menu_file):
+        run(f"sed -i 's/--no-sandbox/--no-sandbox --use-tray-icon/' {menu_file} > /dev/null", sudo=True)
+
+
+def install_media_utils(*, ask=True):
+    logging.info("   -- INSTALLING MEDIA UTILITIES")
+    if ask and not(yes_no("install media utilities")):
+        return
+    for util in ["split2flac", "fpcalc"]:
+        executable = EXEC_DIR / util
+        if executable.exists():
+            logging.info(f"   -- already installed: {util}")
+        else:
+            copy(BIN_DIR / util, executable, mode="755", sudo=True)
+        if util == "split2flac":
+            split2mp3 = executable.with_name("split2mp3")
+            if not split2mp3.exists():
+                copy(executable, split2mp3, link=True, sudo=True)
+
+
+def install_spotify(*, ask=True):
+    logging.info("   -- INSTALLING SPOTIFY")
+    if ask and not(yes_no("install spotify")):
+        return
+    install(["kdocker"], ask=False)
+    install_external("spotify-client", ask=False)
+    menu_file = MENU_DIR / "spotify.desktop"
+    if not contains("kdocker", menu_file):
+        run(f"sed -i 's/^Exec=spotify/Exec=kdocker spotify/' {menu_file} > /dev/null", sudo=True)
+
+
+def install_yq(*, ask=True):
+    logging.info("   -- INSTALLING YQ")
+    if ask and not(yes_no("install yq")):
+        return
+    latest_release = github_release("mikefarah/yq")
+    if local_version("yq") == latest_release:
+        logging.info("   -- already installed")
+    else:
+        url = f"https://github.com/mikefarah/yq/releases/download/v{latest_release}/yq_linux_amd64"
+        fetch(url, dst=f"{EXEC_DIR}/yq", mode="755", sudo=True)
+
+
+def install_vscode(*, ask=True):
+    logging.info("   -- INSTALLING VISUAL STUDIO CODE")
+    if ask and not(yes_no("install vscode")):
+        return
+    install_external("code", ask=False)
+    gpg_file = APT_GPG_DIR / "code.gpg"
+    if gpg_file.exists():
+        run(f"rm -f {gpg_file}", sudo=True)
+    list_file = APT_SRC_DIR / "code.list"
+    if list_file.exists():
+        run(f"rm -f {list_file}", sudo=True)
+        refresh(ask=False)
+
+
+########################################################
+#                                                      #
+#   MAIN                                               #
+#                                                      #
+########################################################
+
+
+# Ubuntu: set server: main server (not "server for Turkey")
+# Mint: update manager preferences: don't offer local repositories
+
+logging.basicConfig(level=logging.INFO, format="")
+
+parser = ArgumentParser(prog="postinst")
+parser.add_argument("--version", action="version", version="2022.04.25")
+parser.add_argument("-x", "--desktop", help="desktop environment", choices=["lxqt", "xfce"])
+parser.add_argument("-r", "--release", help="release", choices=["jammy"])
+parser.add_argument("--refresh", action="store_true")
+parser.add_argument("--dry-run", action="store_true", dest="dry_run")
+parser.add_argument("-v", "--verbose", action="store_true")
+parser.add_argument("tasks", nargs="*")
+arguments = parser.parse_args(sys.argv[1:])
+
+DRY_RUN = arguments.dry_run
+VERBOSE = arguments.verbose
+
+RELEASE = arguments.release or "jammy"
+DESKTOP = arguments.desktop
+
+PACKAGES = json.loads(Path(f"{RELEASE}.json").read_text())
+EXTERNAL_PACKAGES = json.loads(Path("external.json").read_text())
+
+FILE_PACKAGES = {
+    "fontconfig-infinality": "fontconfig-infinality*deb",
+    "madedit-mod": "madedit-mod*deb",
+    "freetube": "freetube*deb",
+    "zoom": "zoom*deb",
+    "drawio": "drawio*deb",
+    "insomnia": "Insomnia*deb",
+    "httptoolkit": "HttpToolkit*deb",
+}
+
+TASKS = {cat: partial(install_category, cat) for cat in PACKAGES}
+TASKS["unneeded"] = partial(uninstall_category, "unneeded")
+TASKS.update({p: partial(install_external, p) for p in EXTERNAL_PACKAGES})
+TASKS.update({p: partial(install_file, p) for p in FILE_PACKAGES})
+
+TASKS.update({
+    "tr-keymaps": set_tr_keymaps,
+    "natural-scrolling": set_natural_scrolling,
+    "infinality": install_infinality,
+    "tilda": install_tilda,
+    "typecatcher": install_typecatcher,
+    "hosts": install_hosts,
+    "tor": install_tor,
+    "palemoon": install_palemoon,
+    "ungoogled-chromium": install_ungoogled_chromium,
+    "owncloud-client": install_owncloud_client,  # updates external packages task
+    "wormhole-william": install_wormhole_william,
+    "youtube-dl": install_youtube_dl,
+    "signal-desktop": install_signal,  # updates external packages task
+    "media-utils": install_media_utils,
+    "spotify-client": install_spotify,  # updates external packages task
+    "code": install_vscode,  # updates external packages task
+    "yq": install_yq,
+})
+
+TASKS_ORDER = [
+    "unneeded", "base", "basics",
+    "xbasics", "infinality", "keymaps", "natural-scrolling",
+    "security", "cryptomator",
+    "utils", "tilda", "typecatcher", "foliate", "madedit-mod",
+    "network", "hosts", "tor", "palemoon", "ungoogled-chromium", "owncloud-client",
+    "wormhole-william", "qbittorrent", "youtube-dl", "freetube",
+    "signal-desktop", "element-desktop", "zoom",
+    "graphics", "draw.io",
+    "office", "latex",
+    "media", "media-utils", "spotify-client", "kdenlive",
+    "games",
+    "devel", "libs", "nodejs", "yq", "vscode", "insomnia", "httptoolkit",
+]
+
+TASKS_DISABLED = {
+    "games", "libs",
+    "infinality", "kdenlive",
+    "signal-desktop", "element-desktop", "zoom",
+    "spotify-client",
+    "insomnia", "httptoolkit",
+    "owncloud-client",  # depends on 21.04
+    "nodejs",  # depends on impish
+}
+
+if any(t not in TASKS for t in arguments.tasks):
+    print("unknown task", file=sys.stderr)
+    sys.exit()
+
+tasks = set(arguments.tasks)
+if len(tasks) == 0:
+    tasks = set(TASKS.keys()).difference(TASKS_DISABLED)
+
+needs_desktop = {c for c in PACKAGES if "desktop" in PACKAGES[c]}
+if (len(tasks.intersection(needs_desktop)) > 0) and (arguments.desktop is None):
+    print("this mode requires a desktop argument", file=sys.stderr)
+    parser.print_usage()
+    sys.exit()
+
+if arguments.refresh:
+    refresh()
+
+for task in TASKS_ORDER:
+    if task in tasks:
+        TASKS[task](ask=task not in arguments.tasks)
+
+# install(["perl-tk"])  # for texdoctk
+# install(["python3-gpg", "dropbox"], from_file="dropbox*deb")
+
+if arguments.refresh:
+    upgrade()

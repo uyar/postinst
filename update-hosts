@@ -1,0 +1,14 @@
+#!/bin/sh
+
+REPO="https://github.com/StevenBlack/hosts.git"
+
+ROOT="/var/local/hosts"
+
+if ! test -e $ROOT ; then
+    git -C $(dirname $ROOT) clone --depth 5 $REPO
+else
+    git -C $ROOT checkout .
+    git -C $ROOT pull
+fi
+
+cd $ROOT && python3 updateHostsFile.py --auto --replace --flush-dns-cache

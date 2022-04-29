@@ -19,6 +19,12 @@
   "kdenlive": {
     "repo": "ppa:kdenlive/kdenlive-stable"
   },
+  "librewolf": {
+    "jammy": {
+      "repo": "deb [arch=amd64] http://deb.librewolf.net jammy main",
+      "key": "https://deb.librewolf.net/keyring.gpg"
+    }
+  },
   "nodejs": {
     "jammy": {
       "repo": "deb https://deb.nodesource.com/node_16.x jammy main",
@@ -32,14 +38,18 @@
     }
   },
   "qbittorrent": {
-    "repo": "ppa:qbittorrent-team/qbittorrent-stable"
+    "impish": {
+      "repo": "ppa:qbittorrent-team/qbittorrent-stable"
+    }
   },
   "signal-desktop": {
     "repo": "deb [arch=amd64] https://updates.signal.org/desktop/apt xenial main",
     "key": "https://updates.signal.org/desktop/apt/keys.asc"
   },
   "spotify-client": {
-    "repo": "deb http://repository.spotify.com stable non-free",
-    "key": "https://download.spotify.com/debian/pubkey_5E3C45D7B312C643.gpg"
+    "impish": {
+      "repo": "deb http://repository.spotify.com stable non-free",
+      "key": "https://download.spotify.com/debian/pubkey_5E3C45D7B312C643.gpg"
+    }
   }
 }

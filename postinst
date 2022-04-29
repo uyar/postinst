@@ -437,6 +437,17 @@ def install_owncloud_client(*, ask=True):
         run(f"sed -i 's/=Utility/=Network/' {menu_file} > /dev/null", sudo=True)
 
 
+def install_dropbox(*, ask=True):
+    logging.info("   -- INSTALLING DROPBOX")
+    if ask and not(yes_no("install dropbox")):
+        return
+    install(["python3-gpg"])
+    install_file("dropbox", ask=False)
+    apt_file = APT_SRC_DIR / "dropbox.list"
+    if apt_file.exists() and contains('^deb', apt_file):
+        run(f"sed -i 's/^deb/# deb/' {apt_file}", sudo=True)
+
+
 def install_wormhole_william(*, ask=True):
     logging.info("   -- INSTALLING WORMHOLE WILLIAM")
     if ask and not(yes_no("install wormhole-william")):
@@ -557,6 +568,7 @@ PACKAGES = json.loads(Path(f"{RELEASE}.json").read_text())
 EXTERNAL_PACKAGES = json.loads(Path("external.json").read_text())
 
 FILE_PACKAGES = {
+    "dropbox": "dropbox*deb",
     "fontconfig-infinality": "fontconfig-infinality*deb",
     "madedit-mod": "madedit-mod*deb",
     "freetube": "freetube*deb",
@@ -582,6 +594,7 @@ TASKS.update({
     "palemoon": install_palemoon,
     "ungoogled-chromium": install_ungoogled_chromium,
     "owncloud-client": install_owncloud_client,  # updates external packages task
+    "dropbox": install_dropbox,
     "wormhole-william": install_wormhole_william,
     "youtube-dl": install_youtube_dl,
     "signal-desktop": install_signal,  # updates external packages task
@@ -596,8 +609,9 @@ TASKS_ORDER = [
     "xbasics", "fontconfig-infinality", "tr-keymaps", "natural-scrolling",
     "security", "cryptomator",
     "utils", "tilda", "typecatcher", "foliate", "madedit-mod",
-    "network", "hosts", "tor", "palemoon", "ungoogled-chromium", "owncloud-client",
-    "wormhole-william", "qbittorrent", "youtube-dl", "freetube",
+    "network", "hosts", "tor", "palemoon", "ungoogled-chromium", "librewolf",
+    "owncloud-client", "dropbox", "wormhole-william", "qbittorrent",
+    "youtube-dl", "freetube",
     "signal-desktop", "element-desktop", "zoom",
     "graphics", "draw.io",
     "office", "latex",
@@ -610,9 +624,6 @@ TASKS_DISABLED = {
     "infinality", "kdenlive",
     "signal-desktop", "element-desktop", "zoom",
     "insomnia", "httptoolkit",
-    "qbittorrent",  # no repository for jammy
-    "owncloud-client",  # unmet dependencies
-    "spotify-client",  # unmet dependencies
 }
 
 if any(t not in TASKS for t in arguments.tasks):
@@ -635,9 +646,6 @@ if arguments.refresh:
 for task in TASKS_ORDER:
     if task in tasks:
         TASKS[task](ask=task not in arguments.tasks)
-
-# install(["perl-tk"])  # for texdoctk
-# install(["python3-gpg", "dropbox"], from_file="dropbox*deb")
 
 if arguments.refresh:
     upgrade()

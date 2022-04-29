@@ -44,6 +44,11 @@ BIN_DIR = SOFT_DIR / "Binary"
 ########################################################
 
 
+def get_release():
+    process = subprocess.run("lsb_release -cs", shell=True, capture_output=True)
+    return process.stdout.decode().strip()
+
+
 def partition(f, xs):
     t1, t2 = tee(xs)
     return list(filter(f, t1)), list(filterfalse(f, t2))
@@ -247,6 +252,11 @@ def install_external(package, *, ask=True):
     if ask and not(yes_no(f"install the '{package}' package")):
         return
     data = EXTERNAL_PACKAGES[package]
+    if RELEASE in data:
+        data = data[RELEASE]
+    if "repo" not in data:
+        logging.info(f"-- repository information missing")
+        return
     add_apt_repo(package, data["repo"], repo_key=data.get("key"))
     install([package])
 
@@ -423,7 +433,7 @@ def install_owncloud_client(*, ask=True):
         return
     install_external("owncloud-client", ask=False)
     menu_file = MENU_DIR / "owncloud.desktop"
-    if not contains("Network", menu_file):
+    if menu_file.exists() and (not contains("Network", menu_file)):
         run(f"sed -i 's/=Utility/=Network/' {menu_file} > /dev/null", sudo=True)
 
 
@@ -458,7 +468,7 @@ def install_signal(*, ask=True):
         return
     install_external("signal-desktop", ask=False)
     menu_file = MENU_DIR / "signal-desktop.desktop"
-    if not contains("use-tray-icon", menu_file):
+    if menu_file.exists() and (not contains("use-tray-icon", menu_file)):
         run(f"sed -i 's/--no-sandbox/--no-sandbox --use-tray-icon/' {menu_file} > /dev/null", sudo=True)
 
 
@@ -485,7 +495,7 @@ def install_spotify(*, ask=True):
     install(["kdocker"])
     install_external("spotify-client", ask=False)
     menu_file = MENU_DIR / "spotify.desktop"
-    if not contains("kdocker", menu_file):
+    if menu_file.exists() and (not contains("kdocker", menu_file)):
         run(f"sed -i 's/^Exec=spotify/Exec=kdocker spotify/' {menu_file} > /dev/null", sudo=True)
 
 
@@ -540,7 +550,7 @@ arguments = parser.parse_args(sys.argv[1:])
 DRY_RUN = arguments.dry_run
 VERBOSE = arguments.verbose
 
-RELEASE = arguments.release or "jammy"
+RELEASE = arguments.release or get_release()
 DESKTOP = arguments.desktop
 
 PACKAGES = json.loads(Path(f"{RELEASE}.json").read_text())
@@ -551,7 +561,7 @@ FILE_PACKAGES = {
     "madedit-mod": "madedit-mod*deb",
     "freetube": "freetube*deb",
     "zoom": "zoom*deb",
-    "drawio": "drawio*deb",
+    "draw.io": "drawio*deb",
     "insomnia": "Insomnia*deb",
     "httptoolkit": "HttpToolkit*deb",
 }
@@ -564,7 +574,7 @@ TASKS.update({p: partial(install_file, p) for p in FILE_PACKAGES})
 TASKS.update({
     "tr-keymaps": set_tr_keymaps,
     "natural-scrolling": set_natural_scrolling,
-    "infinality": install_infinality,
+    "fontconfig-infinality": install_infinality,  # updates external packages task
     "tilda": install_tilda,
     "typecatcher": install_typecatcher,
     "hosts": install_hosts,
@@ -583,7 +593,7 @@ TASKS.update({
 
 TASKS_ORDER = [
     "unneeded", "base", "basics",
-    "xbasics", "infinality", "tr-keymaps", "natural-scrolling",
+    "xbasics", "fontconfig-infinality", "tr-keymaps", "natural-scrolling",
     "security", "cryptomator",
     "utils", "tilda", "typecatcher", "foliate", "madedit-mod",
     "network", "hosts", "tor", "palemoon", "ungoogled-chromium", "owncloud-client",
@@ -600,9 +610,9 @@ TASKS_DISABLED = {
     "infinality", "kdenlive",
     "signal-desktop", "element-desktop", "zoom",
     "insomnia", "httptoolkit",
-    "qbittorrent",  # can't be installed
-    "owncloud-client",  # can't be installed
-    "spotify-client",  # can't be installed
+    "qbittorrent",  # no repository for jammy
+    "owncloud-client",  # unmet dependencies
+    "spotify-client",  # unmet dependencies
 }
 
 if any(t not in TASKS for t in arguments.tasks):

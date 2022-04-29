@@ -1,11 +1,11 @@
 #!/bin/env python3
 
-import json
 import logging
 import re
 import subprocess
 import sys
 from argparse import ArgumentParser
+from configparser import ConfigParser
 from functools import partial
 from itertools import filterfalse, tee
 from pathlib import Path
@@ -23,9 +23,8 @@ THIS_DIR = Path(__file__).parent
 
 INST_DIR = Path("/usr")
 EXEC_DIR = INST_DIR / "bin"
-SHARE_DIR = INST_DIR / "share"
-MENU_DIR = SHARE_DIR / "applications"
-ICON_DIR = SHARE_DIR / "icons"
+MENU_DIR = INST_DIR / "share" / "applications"
+ICON_DIR = INST_DIR / "share" / "icons"
 OPT_DIR = Path("/opt")
 
 APT_DIR = Path("/etc/apt")
@@ -233,8 +232,9 @@ def install_category(category, *, ask=True):
     logging.info(f"-- INSTALLING CATEGORY: {category.upper()}")
     if ask and not(yes_no(f"install the '{category}' category")):
         return
-    packages = PACKAGES[category].get("_all", [])
-    packages.extend(PACKAGES[category].get("desktop", {}).get(DESKTOP, []))
+    packages = CONFIG[category].get("all", "").split()
+    if CONFIG[category].getboolean("desktop", False):
+        packages.extend(CONFIG[category].get(DESKTOP, "").split())
     install(packages)
 
 
@@ -242,8 +242,9 @@ def uninstall_category(category, *, ask=True):
     logging.info(f"-- UNINSTALLING CATEGORY: {category.upper()}")
     if ask and not(yes_no(f"uninstall the '{category}' category")):
         return
-    packages = PACKAGES[category].get("_all", [])
-    packages.extend(PACKAGES[category].get("desktop", {}).get(DESKTOP, []))
+    packages = CONFIG[category].get("all", "").split()
+    if CONFIG[category].getboolean("desktop", False):
+        packages.extend(CONFIG[category].get(DESKTOP, "").split())
     uninstall(packages)
 
 
@@ -251,13 +252,13 @@ def install_external(package, *, ask=True):
     logging.info(f"-- INSTALLING EXTERNAL PACKAGE: {package.upper()}")
     if ask and not(yes_no(f"install the '{package}' package")):
         return
-    data = EXTERNAL_PACKAGES[package]
-    if RELEASE in data:
-        data = data[RELEASE]
-    if "repo" not in data:
+    repo = CONFIG[package].get("repo", None)
+    if repo is None:
+        repo = CONFIG[package].get(f"repo.{RELEASE}", None)
+    if repo is None:
         logging.info(f"-- repository information missing")
         return
-    add_apt_repo(package, data["repo"], repo_key=data.get("key"))
+    add_apt_repo(package, repo, repo_key=CONFIG[package].get("key", None))
     install([package])
 
 
@@ -268,7 +269,7 @@ def install_file(package, *, ask=True):
     if installed(package):
         logging.info("   -- already installed")
     else:
-        path = PKGS_DIR / FILE_PACKAGES[package]
+        path = PKGS_DIR / f"{CONFIG[package]['filename']}*deb"
         run(f"apt install --no-install-recommends {path}", sudo=True)
 
 
@@ -536,6 +537,10 @@ def install_vscode(*, ask=True):
         refresh(ask=False)
 
 
+def custom_action(section, *, ask=True):
+    CUSTOM_ACTIONS[section](ask=ask)
+
+
 ########################################################
 #                                                      #
 #   MAIN                                               #
@@ -564,77 +569,44 @@ VERBOSE = arguments.verbose
 RELEASE = arguments.release or get_release()
 DESKTOP = arguments.desktop
 
-PACKAGES = json.loads(Path(f"{RELEASE}.json").read_text())
-EXTERNAL_PACKAGES = json.loads(Path("external.json").read_text())
+CONFIG = ConfigParser()
+CONFIG.read("tasks.ini")
 
-FILE_PACKAGES = {
-    "dropbox": "dropbox*deb",
-    "fontconfig-infinality": "fontconfig-infinality*deb",
-    "madedit-mod": "madedit-mod*deb",
-    "freetube": "freetube*deb",
-    "zoom": "zoom*deb",
-    "draw.io": "drawio*deb",
-    "insomnia": "Insomnia*deb",
-    "httptoolkit": "HttpToolkit*deb",
+ALL_TASKS = {
+    section: partial(globals().get(CONFIG[section]["action"]), section)
+    for section in CONFIG.sections()
 }
 
-TASKS = {cat: partial(install_category, cat) for cat in PACKAGES}
-TASKS["unneeded"] = partial(uninstall_category, "unneeded")
-TASKS.update({p: partial(install_external, p) for p in EXTERNAL_PACKAGES})
-TASKS.update({p: partial(install_file, p) for p in FILE_PACKAGES})
-
-TASKS.update({
+CUSTOM_ACTIONS = {
     "tr-keymaps": set_tr_keymaps,
     "natural-scrolling": set_natural_scrolling,
-    "fontconfig-infinality": install_infinality,  # updates external packages task
+    "fontconfig-infinality": install_infinality,
     "tilda": install_tilda,
     "typecatcher": install_typecatcher,
     "hosts": install_hosts,
     "tor": install_tor,
     "palemoon": install_palemoon,
     "ungoogled-chromium": install_ungoogled_chromium,
-    "owncloud-client": install_owncloud_client,  # updates external packages task
+    "owncloud-client": install_owncloud_client,
     "dropbox": install_dropbox,
     "wormhole-william": install_wormhole_william,
     "youtube-dl": install_youtube_dl,
-    "signal-desktop": install_signal,  # updates external packages task
+    "signal-desktop": install_signal,
     "media-utils": install_media_utils,
-    "spotify-client": install_spotify,  # updates external packages task
-    "code": install_vscode,  # updates external packages task
+    "spotify-client": install_spotify,
+    "code": install_vscode,
     "yq": install_yq,
-})
-
-TASKS_ORDER = [
-    "unneeded", "base", "basics",
-    "xbasics", "fontconfig-infinality", "tr-keymaps", "natural-scrolling",
-    "security", "cryptomator",
-    "utils", "tilda", "typecatcher", "foliate", "madedit-mod",
-    "network", "hosts", "tor", "palemoon", "ungoogled-chromium", "librewolf",
-    "owncloud-client", "dropbox", "wormhole-william", "qbittorrent",
-    "youtube-dl", "freetube",
-    "signal-desktop", "element-desktop", "zoom",
-    "graphics", "draw.io",
-    "office", "latex",
-    "media", "media-utils", "spotify-client", "kdenlive",
-    "games",
-    "devel", "libs", "nodejs", "yq", "code", "insomnia", "httptoolkit",
-]
-
-TASKS_DISABLED = {
-    "infinality", "kdenlive",
-    "signal-desktop", "element-desktop", "zoom",
-    "insomnia", "httptoolkit",
 }
 
-if any(t not in TASKS for t in arguments.tasks):
+if any(t not in ALL_TASKS for t in arguments.tasks):
     print("unknown task", file=sys.stderr)
     sys.exit()
 
 tasks = set(arguments.tasks)
 if len(tasks) == 0:
-    tasks = set(TASKS.keys()).difference(TASKS_DISABLED)
+    tasks = {t for t in ALL_TASKS if not CONFIG[t].getboolean("disabled", False)}
 
-needs_desktop = {c for c in PACKAGES if "desktop" in PACKAGES[c]}
+needs_desktop = {c for c in ALL_TASKS if CONFIG[c].getboolean("desktop", False)}
 if (len(tasks.intersection(needs_desktop)) > 0) and (arguments.desktop is None):
     print("this mode requires a desktop argument", file=sys.stderr)
     parser.print_usage()
@@ -643,9 +615,9 @@ if (len(tasks.intersection(needs_desktop)) > 0) and (arguments.desktop is None):
 if arguments.refresh:
     refresh()
 
-for task in TASKS_ORDER:
+for task, handler in ALL_TASKS.items():
     if task in tasks:
-        TASKS[task](ask=task not in arguments.tasks)
+        handler(ask=task not in arguments.tasks)
 
 if arguments.refresh:
     upgrade()

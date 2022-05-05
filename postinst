@@ -258,7 +258,10 @@ def install_external(package, *, ask=True):
     if repo is None:
         logging.info(f"-- repository information missing")
         return
-    add_apt_repo(package, repo, repo_key=CONFIG[package].get("key", None))
+    key = CONFIG[package].get("key", None)
+    if key is None:
+        key = CONFIG[package].get(f"key.{RELEASE}", None)
+    add_apt_repo(package, repo, repo_key=key)
     install([package])
 
 

@@ -20,6 +20,8 @@ from urllib.request import urlopen
 
 
 THIS_DIR = Path(__file__).parent
+DOWNLOADS_DIR = THIS_DIR / "downloads"
+PKGS_DIR = Path.home() / "Public" / "Software" / "Linux" / "Ubuntu"
 
 INST_DIR = Path("/usr")
 EXEC_DIR = INST_DIR / "bin"
@@ -30,10 +32,6 @@ OPT_DIR = Path("/opt")
 APT_DIR = Path("/etc/apt")
 APT_SRC_DIR = APT_DIR / "sources.list.d"
 APT_GPG_DIR = APT_DIR / "trusted.gpg.d"
-
-SOFT_DIR = Path.home() / "Public" / "Software" / "Linux"
-PKGS_DIR = SOFT_DIR / "Ubuntu"
-BIN_DIR = SOFT_DIR / "Binary"
 
 
 ########################################################
@@ -131,17 +129,9 @@ def fetch(url, dst, *, gpg=False, mode=None, sudo=False):
 def local_version(executable, prefix=""):
     try:
         p = subprocess.run([executable, "--version"], capture_output=True)
-        return p.stdout.decode().strip().split(" ")[-1][len(prefix):]
+        return p.stdout.decode().splitlines()[0].strip().split(" ")[-1][len(prefix):]
     except FileNotFoundError:
         return None
-
-
-def github_release(repo):
-    url = f"https://github.com/{repo}/"
-    with urlopen(url) as c:
-        content = c.read().decode()
-    match = re.search(r"/releases/tag/v([0-9.]+)", content)
-    return match.group(1)
 
 
 ########################################################
@@ -382,12 +372,25 @@ def install_palemoon(*, ask=True, priority=100):
     if ask and not(yes_no("install palemoon")):
         return
 
+    base_url = "https://linux.palemoon.org/"
+    with urlopen(base_url + "download/mainline/") as c:
+        content = c.read().decode()
+    match = re.search(r'href="(.*/(palemoon-([0-9.]+)\.linux-x86_64-gtk3\.tar\.xz))"', content)
+    route, filename, latest = match.groups()
+
     app_dir = OPT_DIR / "palemoon"
     if app_dir.exists():
-        logging.info("   -- already extracted")
-    else:
-        files = list(BIN_DIR.glob("palemoon*.tar.*"))
-        extract(files[-1], app_dir.parent, sudo=True)
+        if local_version(app_dir / "palemoon") != latest:
+            logging.info("   -- old version, removing")
+            run(f"rm -rf {app_dir}", sudo=True)
+        else:
+            logging.info("   -- already extracted")
+
+    if not app_dir.exists():
+        downloaded = DOWNLOADS_DIR / filename
+        if not downloaded.exists():
+            fetch(f"{base_url}{route}", dst=downloaded)
+        extract(downloaded, app_dir.parent, sudo=True)
 
     executable = EXEC_DIR / "palemoon"
     if not executable.exists():
@@ -408,12 +411,29 @@ def install_ungoogled_chromium(*, ask=True, priority=200):
     if ask and not(yes_no("install ungoogled chromium")):
         return
 
+    base_url = "https://ungoogled-software.github.io/ungoogled-chromium-binaries/"
+    with urlopen(base_url) as c:
+        content = c.read().decode()
+    match = re.search(r"/(releases/linux_portable/64bit/([0-9.]+)(-[0-9]+)?)", content)
+    route, latest, _ = match.groups()
+
     app_dir = OPT_DIR / "ungoogled-chromium"
     if app_dir.exists():
-        logging.info("   -- already extracted")
-    else:
-        files = list(BIN_DIR.glob("ungoogled-chromium*.tar.*"))
-        extract(files[-1], app_dir.parent, sudo=True)
+        if local_version(app_dir / "chrome") != latest:
+            logging.info("   -- old version, removing")
+            run(f"rm -rf {app_dir}", sudo=True)
+        else:
+            logging.info("   -- already extracted")
+
+    if not app_dir.exists():
+        with urlopen(f"{base_url}{route}") as c:
+            content = c.read().decode()
+        match = re.search(r'href="(https://.*/(ungoogled-chromium.*\.tar\.xz))"', content)
+        url, filename = match.groups()
+        downloaded = DOWNLOADS_DIR / filename
+        if not downloaded.exists():
+            fetch(url, dst=downloaded)
+        extract(downloaded, app_dir.parent, sudo=True)
         run(f"mv {app_dir}* {app_dir}", sudo=True)
 
     executable = EXEC_DIR / "chromium"
@@ -456,12 +476,21 @@ def install_wormhole_william(*, ask=True):
     logging.info("   -- INSTALLING WORMHOLE WILLIAM")
     if ask and not(yes_no("install wormhole-william")):
         return
-    latest_release = github_release("psanford/wormhole-william")
-    if local_version("wormhole-william", prefix="v") == latest_release:
+    url = "https://github.com/psanford/wormhole-william"
+    with urlopen(url) as c:
+        content = c.read().decode()
+    match = re.search(r"/releases/tag/v([0-9.]+)", content)
+    latest = match.group(1)
+
+    executable = EXEC_DIR / "wormhole-william"
+    if local_version(executable, prefix="v") == latest:
         logging.info("   -- already installed")
     else:
-        url = f"https://github.com/psanford/wormhole-william/releases/download/v{latest_release}/wormhole-william-linux-amd64"
-        fetch(url, dst=EXEC_DIR / "wormhole-william", mode="755", sudo=True)
+        url = f"{url}/releases/download/v{latest}/wormhole-william-linux-amd64"
+        downloaded = DOWNLOADS_DIR / f"wormhole-william-{latest}"
+        if not downloaded.exists():
+            fetch(url, dst=downloaded, mode="755", sudo=True)
+        copy(downloaded, executable, mode="755", sudo=True)
 
 
 def install_youtube_dl(*, ask=True):
@@ -487,20 +516,28 @@ def install_signal(*, ask=True):
         run(f"sed -i 's/--no-sandbox/--no-sandbox --use-tray-icon/' {menu_file} > /dev/null", sudo=True)
 
 
-def install_media_utils(*, ask=True):
-    logging.info("   -- INSTALLING MEDIA UTILITIES")
-    if ask and not(yes_no("install media utilities")):
+def install_split2flac(*, ask=True):
+    logging.info("   -- INSTALLING SPLIT2FLAC")
+    if ask and not(yes_no("install split2flac")):
         return
-    for util in ["split2flac", "fpcalc"]:
-        executable = EXEC_DIR / util
-        if executable.exists():
-            logging.info(f"   -- already installed: {util}")
-        else:
-            copy(BIN_DIR / util, executable, mode="755", sudo=True)
-        if util == "split2flac":
-            split2mp3 = executable.with_name("split2mp3")
-            if not split2mp3.exists():
-                copy(executable, split2mp3, link=True, sudo=True)
+    url = "https://raw.githubusercontent.com/ftrvxmtrx/split2flac/master/split2flac"
+    with urlopen(url) as c:
+        content = c.read().decode()
+    match = re.search(r"VERSION=([0-9]+)", content)
+    latest = match.group(1)
+    downloaded = DOWNLOADS_DIR / f"split2flac-{latest}"
+    if not downloaded.exists():
+        # TODO: don't fetch a second time
+        fetch(url, downloaded, mode="755")
+
+    executable = EXEC_DIR / "split2flac"
+    if local_version(executable) == latest:
+        logging.info(f"   -- already installed")
+    else:
+        copy(downloaded, executable, mode="755", sudo=True)
+    split2mp3 = executable.with_name("split2mp3")
+    if not split2mp3.exists():
+        copy(executable, split2mp3, link=True, sudo=True)
 
 
 def install_spotify(*, ask=True):
@@ -518,12 +555,21 @@ def install_yq(*, ask=True):
     logging.info("   -- INSTALLING YQ")
     if ask and not(yes_no("install yq")):
         return
-    latest_release = github_release("mikefarah/yq")
-    if local_version("yq") == latest_release:
+    url = "https://github.com/mikefarah/yq"
+    with urlopen(url) as c:
+        content = c.read().decode()
+    match = re.search(r"/releases/tag/v([0-9.]+)", content)
+    latest = match.group(1)
+
+    executable = EXEC_DIR / "yq"
+    if local_version(executable) == latest:
         logging.info("   -- already installed")
     else:
-        url = f"https://github.com/mikefarah/yq/releases/download/v{latest_release}/yq_linux_amd64"
-        fetch(url, dst=f"{EXEC_DIR}/yq", mode="755", sudo=True)
+        url = f"{url}/releases/download/v{latest}/yq_linux_amd64"
+        downloaded = DOWNLOADS_DIR / f"yq-{latest}"
+        if not downloaded.exists():
+            fetch(url, dst=downloaded, mode="755", sudo=True)
+        copy(downloaded, executable, mode="755", sudo=True)
 
 
 def install_vscode(*, ask=True):
@@ -595,7 +641,7 @@ CUSTOM_ACTIONS = {
     "wormhole-william": install_wormhole_william,
     "youtube-dl": install_youtube_dl,
     "signal-desktop": install_signal,
-    "media-utils": install_media_utils,
+    "split2flac": install_split2flac,
     "spotify-client": install_spotify,
     "code": install_vscode,
     "yq": install_yq,

@@ -246,7 +246,7 @@ def install_external(package, *, ask=True):
     if repo is None:
         repo = CONFIG[package].get(f"repo.{RELEASE}", None)
     if repo is None:
-        logging.info(f"-- repository information missing")
+        logging.info("-- repository information missing")
         return
     key = CONFIG[package].get("key", None)
     if key is None:
@@ -273,7 +273,7 @@ def install_file(package, *, ask=True):
 ########################################################
 
 
-def set_tr_keymaps(*, ask=True):
+def install_tr_keymaps(*, ask=True):
     xkb_dir = Path("/usr/share/X11/xkb")
     xkb_tr = xkb_dir / "symbols" / "tr"
 
@@ -292,7 +292,7 @@ def set_tr_keymaps(*, ask=True):
             patch(xkb_dir, THIS_DIR / "xkb-tr-typewriter.patch.gz", strip=1, sudo=True)
 
 
-def set_natural_scrolling(*, ask=True):
+def install_natural_scrolling(*, ask=True):
     logging.info("   -- SETTING NATURAL SCROLLING")
     if ask and not(yes_no("set natural scrolling")):
         return
@@ -303,7 +303,7 @@ def set_natural_scrolling(*, ask=True):
         patch(conf_file, THIS_DIR / "libinput.conf.patch.gz", sudo=True)
 
 
-def install_infinality(*, ask=True):
+def install_fontconfig_infinality(*, ask=True):
     logging.info("   -- INSTALLING INFINALITY FONTCONFIG")
     if ask and not(yes_no("install infinality fontconfig")):
         return
@@ -361,7 +361,7 @@ def install_tor(*, ask=True):
         cat(config, "upstream socks5 127.0.0.1:9050", append=True, sudo=True)
         restart = True
     if not contains('^LogFile "/dev/null"', config):
-        run(f"sed -i 's/^LogFile .*/LogFile \"\/dev\/null\"/' {config}", sudo=True)
+        run(f"sed -i 's|^LogFile .*|LogFile \"/dev/null\"|' {config}", sudo=True)
         restart = True
     if restart:
         run("systemctl restart tinyproxy", sudo=True)
@@ -506,7 +506,7 @@ def install_youtube_dl(*, ask=True):
         fetch(url, dst=executable, mode="755", sudo=True)
 
 
-def install_signal(*, ask=True):
+def install_signal_desktop(*, ask=True):
     logging.info("   -- INSTALLING SIGNAL")
     if ask and not(yes_no("install signal")):
         return
@@ -532,7 +532,7 @@ def install_split2flac(*, ask=True):
 
     executable = EXEC_DIR / "split2flac"
     if local_version(executable) == latest:
-        logging.info(f"   -- already installed")
+        logging.info("   -- already installed")
     else:
         copy(downloaded, executable, mode="755", sudo=True)
     split2mp3 = executable.with_name("split2mp3")
@@ -540,7 +540,7 @@ def install_split2flac(*, ask=True):
         copy(executable, split2mp3, link=True, sudo=True)
 
 
-def install_spotify(*, ask=True):
+def install_spotify_client(*, ask=True):
     logging.info("   -- INSTALLING SPOTIFY")
     if ask and not(yes_no("install spotify")):
         return
@@ -572,7 +572,7 @@ def install_yq(*, ask=True):
         copy(downloaded, executable, mode="755", sudo=True)
 
 
-def install_vscode(*, ask=True):
+def install_code(*, ask=True):
     logging.info("   -- INSTALLING VISUAL STUDIO CODE")
     if ask and not(yes_no("install vscode")):
         return
@@ -587,7 +587,8 @@ def install_vscode(*, ask=True):
 
 
 def custom_action(section, *, ask=True):
-    CUSTOM_ACTIONS[section](ask=ask)
+    handler = globals().get(f"install_{section.replace('-', '_')}")
+    handler(ask=ask)
 
 
 ########################################################
@@ -624,27 +625,6 @@ CONFIG.read("tasks.ini")
 ALL_TASKS = {
     section: partial(globals().get(CONFIG[section]["action"]), section)
     for section in CONFIG.sections()
-}
-
-CUSTOM_ACTIONS = {
-    "tr-keymaps": set_tr_keymaps,
-    "natural-scrolling": set_natural_scrolling,
-    "fontconfig-infinality": install_infinality,
-    "tilda": install_tilda,
-    "typecatcher": install_typecatcher,
-    "hosts": install_hosts,
-    "tor": install_tor,
-    "palemoon": install_palemoon,
-    "ungoogled-chromium": install_ungoogled_chromium,
-    "owncloud-client": install_owncloud_client,
-    "dropbox": install_dropbox,
-    "wormhole-william": install_wormhole_william,
-    "youtube-dl": install_youtube_dl,
-    "signal-desktop": install_signal,
-    "split2flac": install_split2flac,
-    "spotify-client": install_spotify,
-    "code": install_vscode,
-    "yq": install_yq,
 }
 
 if any(t not in ALL_TASKS for t in arguments.tasks):

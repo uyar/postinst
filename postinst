@@ -21,7 +21,6 @@ from urllib.request import urlopen
 
 THIS_DIR = Path(__file__).parent
 DOWNLOADS_DIR = THIS_DIR / "downloads"
-PKGS_DIR = Path.home() / "Public" / "Software" / "Linux" / "Ubuntu"
 
 INST_DIR = Path("/usr")
 EXEC_DIR = INST_DIR / "bin"
@@ -262,7 +261,7 @@ def install_file(package, *, ask=True):
     if installed(package):
         logging.info("   -- already installed")
     else:
-        path = PKGS_DIR / f"{CONFIG[package]['filename']}*deb"
+        path = DOWNLOADS_DIR / f"{CONFIG[package]['filename']}*deb"
         run(f"apt install --no-install-recommends {path}", sudo=True)
 
 

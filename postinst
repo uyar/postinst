@@ -607,11 +607,6 @@ def install_code(*, ask=True):
         refresh(ask=False)
 
 
-def custom_action(section, *, ask=True):
-    handler = globals().get(f"install_{section.replace('-', '_')}")
-    handler(ask=ask)
-
-
 ########################################################
 #                                                      #
 #   MAIN                                               #
@@ -643,10 +638,20 @@ DESKTOP = arguments.desktop
 CONFIG = ConfigParser()
 CONFIG.read("tasks.ini")
 
-ALL_TASKS = {
-    section: partial(globals().get(CONFIG[section]["action"]), section)
-    for section in CONFIG.sections()
+SECTIONED_TASKS = {
+    "install_category",
+    "install_external",
+    "install_file",
+    "uninstall_category",
 }
+
+ALL_TASKS = {}
+for section in CONFIG.sections():
+    action = CONFIG[section]["action"]
+    if action in SECTIONED_TASKS:
+        ALL_TASKS[section] = partial(globals().get(action), section)
+    else:
+        ALL_TASKS[section] = globals().get(action)
 
 if any(t not in ALL_TASKS for t in arguments.tasks):
     print("unknown task", file=sys.stderr)

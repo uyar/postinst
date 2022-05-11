@@ -9,6 +9,7 @@ from configparser import ConfigParser
 from functools import partial
 from itertools import filterfalse, tee
 from pathlib import Path
+from urllib.parse import urljoin
 from urllib.request import urlopen
 
 
@@ -146,6 +147,15 @@ def installed(package):
     return b"install ok installed" in process.stdout
 
 
+def package_version(package):
+    command = "dpkg-query -W " + package
+    process = subprocess.run(command, shell=True, capture_output=True)
+    output = process.stdout.strip().decode()
+    if "no packages found" in output:
+        return None
+    return output.split("\t")[-1]
+
+
 def install(packages):
     exclude, include = partition(installed, packages)
     if len(exclude) > 0:
@@ -258,11 +268,23 @@ def install_file(package, *, ask=True):
     logging.info(f"-- INSTALLING FILE PACKAGE: {package.upper()}")
     if ask and not(yes_no(f"install the '{package}' package")):
         return
-    if installed(package):
+
+    page = CONFIG[package]["page"]
+    with urlopen(page) as c:
+        content = c.read().decode()
+
+    regex = CONFIG[package]["regex"]
+    match = re.search(regex, content)
+    route, filename, latest = match.groups()
+    url = urljoin(page, route)
+
+    if package_version(package) == latest:
         logging.info("   -- already installed")
     else:
-        path = DOWNLOADS_DIR / f"{CONFIG[package]['filename']}*deb"
-        run(f"apt install --no-install-recommends {path}", sudo=True)
+        downloaded = DOWNLOADS_DIR / filename
+        if not downloaded.exists():
+            fetch(url, dst=downloaded)
+        run(f"apt install --no-install-recommends {downloaded}", sudo=True)
 
 
 ########################################################

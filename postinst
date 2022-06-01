@@ -614,26 +614,24 @@ def install_code(*, ask=True):
 ########################################################
 
 
+def make_parser():
+    parser = ArgumentParser(prog="postinst")
+    parser.add_argument("--version", action="version", version="2022.06.01")
+    parser.add_argument("-x", "--desktop", help="desktop environment",
+                        choices=["lxqt", "xfce"])
+    parser.add_argument("-r", "--release", help="release", choices=["jammy"])
+    parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", dest="dry_run")
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("tasks", nargs="*", help="task(s) to execute",
+                        choices=ALL_TASKS.keys())
+    return parser
+
+
 # Ubuntu: set server: main server (not "server for Turkey")
 # Mint: update manager preferences: don't offer local repositories
 
 logging.basicConfig(level=logging.INFO, format="")
-
-parser = ArgumentParser(prog="postinst")
-parser.add_argument("--version", action="version", version="2022.04.25")
-parser.add_argument("-x", "--desktop", help="desktop environment", choices=["lxqt", "xfce"])
-parser.add_argument("-r", "--release", help="release", choices=["jammy"])
-parser.add_argument("--refresh", action="store_true")
-parser.add_argument("--dry-run", action="store_true", dest="dry_run")
-parser.add_argument("-v", "--verbose", action="store_true")
-parser.add_argument("tasks", nargs="*")
-arguments = parser.parse_args(sys.argv[1:])
-
-DRY_RUN = arguments.dry_run
-VERBOSE = arguments.verbose
-
-RELEASE = arguments.release or get_release()
-DESKTOP = arguments.desktop
 
 CONFIG = ConfigParser()
 CONFIG.read("tasks.ini")
@@ -652,6 +650,15 @@ for section in CONFIG.sections():
         ALL_TASKS[section] = partial(globals().get(action), section)
     else:
         ALL_TASKS[section] = globals().get(action)
+
+parser = make_parser()
+arguments = parser.parse_args(sys.argv[1:])
+
+DRY_RUN = arguments.dry_run
+VERBOSE = arguments.verbose
+
+RELEASE = arguments.release or get_release()
+DESKTOP = arguments.desktop
 
 if any(t not in ALL_TASKS for t in arguments.tasks):
     print("unknown task", file=sys.stderr)

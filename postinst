@@ -510,7 +510,7 @@ def install_wormhole_william(*, ask=True):
         url = f"{url}/releases/download/v{latest}/wormhole-william-linux-amd64"
         downloaded = DOWNLOADS_DIR / f"wormhole-william-{latest}"
         if not downloaded.exists():
-            fetch(url, dst=downloaded, mode="755", sudo=True)
+            fetch(url, dst=downloaded, mode="755")
         copy(downloaded, executable, mode="755", sudo=True)
 
 
@@ -589,7 +589,7 @@ def install_yq(*, ask=True):
         url = f"{url}/releases/download/v{latest}/yq_linux_amd64"
         downloaded = DOWNLOADS_DIR / f"yq-{latest}"
         if not downloaded.exists():
-            fetch(url, dst=downloaded, mode="755", sudo=True)
+            fetch(url, dst=downloaded, mode="755")
         copy(downloaded, executable, mode="755", sudo=True)
 
 

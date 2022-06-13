@@ -623,8 +623,8 @@ def make_parser():
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("tasks", nargs="*", help="task(s) to execute",
-                        choices=ALL_TASKS.keys())
+    parser.add_argument("tasks", nargs="*",
+                        help="task(s) to execute: " + ",".join(ALL_TASKS))
     return parser
 
 

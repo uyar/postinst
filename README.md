@@ -10,7 +10,7 @@ postinst ungoogled-chromium
 postinst natural-scrolling typecatcher
 ```
 
-If run without parameters, it will run all tasks.
+If run without parameters, it will run all tasks in interactive mode.
 
 The list of available task names can be printed using the `--help` option.
 The `-v` option will display the operations carried out by a task.
@@ -105,8 +105,12 @@ Each section has an action which describes the operation:
   ```
 
 Tasks can be disabled by setting the `disabled` key to true.
-In this case, the task will be skipped in the script is run without specific tasks.
-If the script is run with a specific task as parameter, the `disabled` key will be ignored.
+If disabled, the task will be skipped in the script is run without specific tasks.
+If the script is run with a specific task as parameter, the `disabled` key will have no effect.
 
 All other keys will be ignored.
 These can be used for note taking or other purposes.
+
+Note: The actions are written so that running them multiple will not cause
+any problems or repeated effects.
+Custom action functions should also try to achieve this goal.

@@ -1,4 +1,4 @@
-#!/bin/env python3
+#!/usr/bin/env python3
 
 import logging
 import re
@@ -11,6 +11,9 @@ from itertools import filterfalse, tee
 from pathlib import Path
 from urllib.parse import urljoin
 from urllib.request import urlopen
+
+
+__version__ = "2022.08.31"
 
 
 ########################################################
@@ -215,21 +218,21 @@ def add_alternative(generic, name, path, priority):
 
 def refresh(*, ask=True):
     logging.info("-- UPDATING PACKAGE DATA")
-    if ask and not(yes_no("update package data")):
+    if ask and (not yes_no("update package data")):
         return
     run("apt update", sudo=True)
 
 
 def upgrade(*, ask=True):
     logging.info("-- UPGRADING PACKAGES")
-    if ask and not(yes_no("upgrade all packages")):
+    if ask and (not yes_no("upgrade all packages")):
         return
     run("apt upgrade", sudo=True)
 
 
 def install_category(category, *, ask=True):
     logging.info(f"-- INSTALLING CATEGORY: {category.upper()}")
-    if ask and not(yes_no(f"install the '{category}' category")):
+    if ask and (not yes_no(f"install the '{category}' category")):
         return
     packages = CONFIG[category].get("all", "").split()
     if CONFIG[category].getboolean("desktop", False):
@@ -239,7 +242,7 @@ def install_category(category, *, ask=True):
 
 def uninstall_category(category, *, ask=True):
     logging.info(f"-- UNINSTALLING CATEGORY: {category.upper()}")
-    if ask and not(yes_no(f"uninstall the '{category}' category")):
+    if ask and (not yes_no(f"uninstall the '{category}' category")):
         return
     packages = CONFIG[category].get("all", "").split()
     if CONFIG[category].getboolean("desktop", False):
@@ -249,7 +252,7 @@ def uninstall_category(category, *, ask=True):
 
 def install_external(package, *, ask=True):
     logging.info(f"-- INSTALLING EXTERNAL PACKAGE: {package.upper()}")
-    if ask and not(yes_no(f"install the '{package}' package")):
+    if ask and (not yes_no(f"install the '{package}' package")):
         return
     repo = CONFIG[package].get("repo", None)
     if repo is None:
@@ -266,7 +269,7 @@ def install_external(package, *, ask=True):
 
 def install_file(package, *, ask=True):
     logging.info(f"-- INSTALLING FILE PACKAGE: {package.upper()}")
-    if ask and not(yes_no(f"install the '{package}' package")):
+    if ask and (not yes_no(f"install the '{package}' package")):
         return
 
     page = CONFIG[package]["page"]
@@ -315,7 +318,7 @@ def install_tr_keymaps(*, ask=True):
 
 def install_natural_scrolling(*, ask=True):
     logging.info("   -- SETTING NATURAL SCROLLING")
-    if ask and not(yes_no("set natural scrolling")):
+    if ask and (not yes_no("set natural scrolling")):
         return
     conf_file = Path("/usr/share/X11/xorg.conf.d/40-libinput.conf")
     if contains("NaturalScrolling", conf_file):
@@ -326,7 +329,7 @@ def install_natural_scrolling(*, ask=True):
 
 def install_fontconfig_infinality(*, ask=True):
     logging.info("   -- INSTALLING INFINALITY FONTCONFIG")
-    if ask and not(yes_no("install infinality fontconfig")):
+    if ask and (not yes_no("install infinality fontconfig")):
         return
     # install_external("fontconfig-infinality", ask=ask)
     install_file("fontconfig-infinality", ask=False)
@@ -336,7 +339,7 @@ def install_fontconfig_infinality(*, ask=True):
 
 def install_tilda(*, ask=True):
     logging.info("   -- INSTALLING TILDA")
-    if ask and not(yes_no("install tilda")):
+    if ask and (not yes_no("install tilda")):
         return
     install(["tilda"])
     menu_file = MENU_DIR / "tilda.desktop"
@@ -347,7 +350,7 @@ def install_tilda(*, ask=True):
 
 def install_typecatcher(*, ask=True):
     logging.info("   -- INSTALLING TYPECATCHER")
-    if ask and not(yes_no("install typecatcher")):
+    if ask and (not yes_no("install typecatcher")):
         return
     install(["typecatcher"])
     builder_file = Path("/usr/lib/python3/dist-packages/typecatcher_lib/Builder.py")
@@ -359,7 +362,7 @@ def install_typecatcher(*, ask=True):
 
 def install_hosts(*, ask=True):
     logging.info("   -- INSTALLING HOSTS BLACKLIST")
-    if ask and not(yes_no("install hosts blacklist")):
+    if ask and (not yes_no("install hosts blacklist")):
         return
     cron_file = Path("/etc/cron.daily/update-hosts")
     if cron_file.exists():
@@ -373,7 +376,7 @@ def install_hosts(*, ask=True):
 
 def install_tor(*, ask=True):
     logging.info("   -- INSTALLING TOR with TINYPROXY")
-    if ask and not(yes_no("install tor")):
+    if ask and (not yes_no("install tor")):
         return
     install(["tor", "tinyproxy"])
     config = Path("/etc/tinyproxy/tinyproxy.conf")
@@ -390,7 +393,7 @@ def install_tor(*, ask=True):
 
 def install_palemoon(*, ask=True, priority=100):
     logging.info("   -- INSTALLING PALE MOON")
-    if ask and not(yes_no("install palemoon")):
+    if ask and (not yes_no("install palemoon")):
         return
 
     base_url = "https://linux.palemoon.org/"
@@ -429,7 +432,7 @@ def install_palemoon(*, ask=True, priority=100):
 
 def install_ungoogled_chromium(*, ask=True, priority=200):
     logging.info("   -- INSTALLING UNGOOGLED CHROMIUM")
-    if ask and not(yes_no("install ungoogled chromium")):
+    if ask and (not yes_no("install ungoogled chromium")):
         return
 
     base_url = "https://ungoogled-software.github.io/ungoogled-chromium-binaries/"
@@ -474,7 +477,7 @@ def install_ungoogled_chromium(*, ask=True, priority=200):
 
 def install_owncloud_client(*, ask=True):
     logging.info("   -- INSTALLING OWNCLOUD CLIENT")
-    if ask and not(yes_no("install owncloud-client")):
+    if ask and (not yes_no("install owncloud-client")):
         return
     install_external("owncloud-client", ask=False)
     menu_file = MENU_DIR / "owncloud.desktop"
@@ -484,7 +487,7 @@ def install_owncloud_client(*, ask=True):
 
 def install_dropbox(*, ask=True):
     logging.info("   -- INSTALLING DROPBOX")
-    if ask and not(yes_no("install dropbox")):
+    if ask and (not yes_no("install dropbox")):
         return
     install(["python3-gpg"])
     install_file("dropbox", ask=False)
@@ -495,7 +498,7 @@ def install_dropbox(*, ask=True):
 
 def install_wormhole_william(*, ask=True):
     logging.info("   -- INSTALLING WORMHOLE WILLIAM")
-    if ask and not(yes_no("install wormhole-william")):
+    if ask and (not yes_no("install wormhole-william")):
         return
     url = "https://github.com/psanford/wormhole-william"
     with urlopen(url) as c:
@@ -516,7 +519,7 @@ def install_wormhole_william(*, ask=True):
 
 def install_youtube_dl(*, ask=True):
     logging.info("   -- INSTALLING YOUTUBE-DL")
-    if ask and not(yes_no("install youtube-dl")):
+    if ask and (not yes_no("install youtube-dl")):
         return
     executable = EXEC_DIR / "youtube-dl"
     if executable.exists():
@@ -529,7 +532,7 @@ def install_youtube_dl(*, ask=True):
 
 def install_signal_desktop(*, ask=True):
     logging.info("   -- INSTALLING SIGNAL")
-    if ask and not(yes_no("install signal")):
+    if ask and (not yes_no("install signal")):
         return
     install_external("signal-desktop", ask=False)
     menu_file = MENU_DIR / "signal-desktop.desktop"
@@ -539,7 +542,7 @@ def install_signal_desktop(*, ask=True):
 
 def install_split2flac(*, ask=True):
     logging.info("   -- INSTALLING SPLIT2FLAC")
-    if ask and not(yes_no("install split2flac")):
+    if ask and (not yes_no("install split2flac")):
         return
     url = "https://raw.githubusercontent.com/ftrvxmtrx/split2flac/master/split2flac"
     with urlopen(url) as c:
@@ -563,7 +566,7 @@ def install_split2flac(*, ask=True):
 
 def install_spotify_client(*, ask=True):
     logging.info("   -- INSTALLING SPOTIFY")
-    if ask and not(yes_no("install spotify")):
+    if ask and (not yes_no("install spotify")):
         return
     install(["kdocker"])
     install_external("spotify-client", ask=False)
@@ -574,7 +577,7 @@ def install_spotify_client(*, ask=True):
 
 def install_yq(*, ask=True):
     logging.info("   -- INSTALLING YQ")
-    if ask and not(yes_no("install yq")):
+    if ask and (not yes_no("install yq")):
         return
     url = "https://github.com/mikefarah/yq"
     with urlopen(url) as c:
@@ -595,7 +598,7 @@ def install_yq(*, ask=True):
 
 def install_code(*, ask=True):
     logging.info("   -- INSTALLING VISUAL STUDIO CODE")
-    if ask and not(yes_no("install vscode")):
+    if ask and (not yes_no("install vscode")):
         return
     install_external("code", ask=False)
     gpg_file = APT_GPG_DIR / "code.gpg"
@@ -616,7 +619,7 @@ def install_code(*, ask=True):
 
 def make_parser():
     parser = ArgumentParser(prog="postinst")
-    parser.add_argument("--version", action="version", version="2022.06.01")
+    parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("-x", "--desktop", help="desktop environment",
                         choices=["lxqt", "xfce"])
     parser.add_argument("-r", "--release", help="release", choices=["jammy"])

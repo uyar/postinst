@@ -343,17 +343,6 @@ def install_fontconfig_infinality(*, ask=True):
     run("echo 3 | sudo /etc/fonts/infinality/infctl.sh setstyle")
 
 
-def install_tilda(*, ask=True):
-    logging.info("   -- INSTALLING TILDA")
-    if ask and (not yes_no("install tilda")):
-        return
-    install(["tilda"])
-    menu_file = MENU_DIR / "tilda.desktop"
-    if not contains("Comment=", menu_file):
-        comment = "Comment=A drop-down terminal emulator."
-        cat(menu_file, comment, append=True, sudo=True)
-
-
 def install_typecatcher(*, ask=True):
     logging.info("   -- INSTALLING TYPECATCHER")
     if ask and (not yes_no("install typecatcher")):
@@ -481,16 +470,6 @@ def install_ungoogled_chromium(*, ask=True, priority=200):
         copy(THIS_DIR / "ungoogled-chromium.desktop", menu_file, sudo=True)
 
 
-def install_owncloud_client(*, ask=True):
-    logging.info("   -- INSTALLING OWNCLOUD CLIENT")
-    if ask and (not yes_no("install owncloud-client")):
-        return
-    install_external("owncloud-client", ask=False)
-    menu_file = MENU_DIR / "owncloud.desktop"
-    if menu_file.exists() and (not contains("Network", menu_file)):
-        run(f"sed -i 's/=Utility/=Network/' {menu_file} > /dev/null", sudo=True)
-
-
 def install_dropbox(*, ask=True):
     logging.info("   -- INSTALLING DROPBOX")
     if ask and (not yes_no("install dropbox")):
@@ -536,16 +515,6 @@ def install_youtube_dl(*, ask=True):
         fetch(url, dst=executable, mode="755", sudo=True)
 
 
-def install_signal_desktop(*, ask=True):
-    logging.info("   -- INSTALLING SIGNAL")
-    if ask and (not yes_no("install signal")):
-        return
-    install_external("signal-desktop", ask=False)
-    menu_file = MENU_DIR / "signal-desktop.desktop"
-    if menu_file.exists() and (not contains("use-tray-icon", menu_file)):
-        run(f"sed -i 's/--no-sandbox/--no-sandbox --use-tray-icon/' {menu_file} > /dev/null", sudo=True)
-
-
 def install_split2flac(*, ask=True):
     logging.info("   -- INSTALLING SPLIT2FLAC")
     if ask and (not yes_no("install split2flac")):
@@ -568,17 +537,6 @@ def install_split2flac(*, ask=True):
     split2mp3 = executable.with_name("split2mp3")
     if not split2mp3.exists():
         copy(executable, split2mp3, link=True, sudo=True)
-
-
-def install_spotify_client(*, ask=True):
-    logging.info("   -- INSTALLING SPOTIFY")
-    if ask and (not yes_no("install spotify")):
-        return
-    install(["kdocker"])
-    install_external("spotify-client", ask=False)
-    menu_file = MENU_DIR / "spotify.desktop"
-    if menu_file.exists() and (not contains("kdocker", menu_file)):
-        run(f"sed -i 's/^Exec=spotify/Exec=kdocker spotify/' {menu_file} > /dev/null", sudo=True)
 
 
 def install_yq(*, ask=True):

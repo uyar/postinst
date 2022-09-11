@@ -13,7 +13,13 @@ from urllib.parse import urljoin
 from urllib.request import urlopen
 
 
-__version__ = "2022.08.31"
+__version__ = "2022.09.11"
+
+
+DRY_RUN = False
+VERBOSE = False
+RELEASE = None
+DESKTOP = None
 
 
 ########################################################
@@ -231,57 +237,57 @@ def upgrade(*, ask=True):
 
 
 def install_category(category, *, ask=True):
-    logging.info(f"-- INSTALLING CATEGORY: {category.upper()}")
-    if ask and (not yes_no(f"install the '{category}' category")):
+    logging.info(f"-- INSTALLING CATEGORY: {category.name.upper()}")
+    if ask and (not yes_no(f"install the '{category.name}' category")):
         return
-    packages = CONFIG[category].get("all", "").split()
-    if CONFIG[category].getboolean("desktop", False):
-        packages.extend(CONFIG[category].get(DESKTOP, "").split())
+    packages = category.get("all", "").split()
+    if category.getboolean("desktop", False):
+        packages.extend(category.get(DESKTOP, "").split())
     install(packages)
 
 
 def uninstall_category(category, *, ask=True):
-    logging.info(f"-- UNINSTALLING CATEGORY: {category.upper()}")
-    if ask and (not yes_no(f"uninstall the '{category}' category")):
+    logging.info(f"-- UNINSTALLING CATEGORY: {category.name.upper()}")
+    if ask and (not yes_no(f"uninstall the '{category.name}' category")):
         return
-    packages = CONFIG[category].get("all", "").split()
-    if CONFIG[category].getboolean("desktop", False):
-        packages.extend(CONFIG[category].get(DESKTOP, "").split())
+    packages = category.get("all", "").split()
+    if category.getboolean("desktop", False):
+        packages.extend(category.get(DESKTOP, "").split())
     uninstall(packages)
 
 
 def install_external(package, *, ask=True):
-    logging.info(f"-- INSTALLING EXTERNAL PACKAGE: {package.upper()}")
-    if ask and (not yes_no(f"install the '{package}' package")):
+    logging.info(f"-- INSTALLING EXTERNAL PACKAGE: {package.name.upper()}")
+    if ask and (not yes_no(f"install the '{package.name}' package")):
         return
-    repo = CONFIG[package].get("repo", None)
+    repo = package.get("repo", None)
     if repo is None:
-        repo = CONFIG[package].get(f"repo.{RELEASE}", None)
+        repo = package.get(f"repo.{RELEASE}", None)
     if repo is None:
         logging.info("-- repository information missing")
         return
-    key = CONFIG[package].get("key", None)
+    key = package.get("key", None)
     if key is None:
-        key = CONFIG[package].get(f"key.{RELEASE}", None)
-    add_apt_repo(package, repo, repo_key=key)
-    install([package])
+        key = package.get(f"key.{RELEASE}", None)
+    add_apt_repo(package.name, repo, repo_key=key)
+    install([package.name])
 
 
 def install_file(package, *, ask=True):
-    logging.info(f"-- INSTALLING FILE PACKAGE: {package.upper()}")
-    if ask and (not yes_no(f"install the '{package}' package")):
+    logging.info(f"-- INSTALLING FILE PACKAGE: {package.name.upper()}")
+    if ask and (not yes_no(f"install the '{package.name}' package")):
         return
 
-    page = CONFIG[package]["page"]
+    page = package["page"]
     with urlopen(page) as c:
         content = c.read().decode()
 
-    regex = CONFIG[package]["regex"]
+    regex = package["regex"]
     match = re.search(regex, content)
     route, filename, latest = match.groups()
     url = urljoin(page, route)
 
-    if package_version(package) == latest:
+    if package_version(package.name) == latest:
         logging.info("   -- already installed")
     else:
         downloaded = DOWNLOADS_DIR / filename
@@ -617,7 +623,7 @@ def install_code(*, ask=True):
 ########################################################
 
 
-def make_parser():
+def make_parser(task_names):
     parser = ArgumentParser(prog="postinst")
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("-x", "--desktop", help="desktop environment",
@@ -627,62 +633,73 @@ def make_parser():
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("tasks", nargs="*",
-                        help="task(s) to execute: " + ",".join(ALL_TASKS))
+                        help="task(s) to execute: " + ",".join(task_names))
     return parser
 
 
 # Ubuntu: set server: main server (not "server for Turkey")
 # Mint: update manager preferences: don't offer local repositories
 
-logging.basicConfig(level=logging.INFO, format="")
 
-CONFIG = ConfigParser()
-CONFIG.read("tasks.ini")
+def main():
+    global DRY_RUN
+    global VERBOSE
+    global RELEASE
+    global DESKTOP
 
-SECTIONED_TASKS = {
-    "install_category",
-    "install_external",
-    "install_file",
-    "uninstall_category",
-}
+    logging.basicConfig(level=logging.INFO, format="")
 
-ALL_TASKS = {}
-for section in CONFIG.sections():
-    action = CONFIG[section]["action"]
-    if action in SECTIONED_TASKS:
-        ALL_TASKS[section] = partial(globals().get(action), section)
-    else:
-        ALL_TASKS[section] = globals().get(action)
+    config = ConfigParser()
+    config.read("tasks.ini")
 
-parser = make_parser()
-arguments = parser.parse_args(sys.argv[1:])
+    sectioned_tasks = {
+        "install_category",
+        "install_external",
+        "install_file",
+        "uninstall_category",
+    }
 
-DRY_RUN = arguments.dry_run
-VERBOSE = arguments.verbose
+    all_tasks = {}
+    for section in config.sections():
+        action = config[section]["action"]
+        if action in sectioned_tasks:
+            all_tasks[section] = partial(globals().get(action), config[section])
+        else:
+            all_tasks[section] = globals().get(action)
 
-RELEASE = arguments.release or get_release()
-DESKTOP = arguments.desktop
+    parser = make_parser(all_tasks)
+    arguments = parser.parse_args(sys.argv[1:])
 
-if any(t not in ALL_TASKS for t in arguments.tasks):
-    print("unknown task", file=sys.stderr)
-    sys.exit()
+    DRY_RUN = arguments.dry_run
+    VERBOSE = arguments.verbose
 
-tasks = set(arguments.tasks)
-if len(tasks) == 0:
-    tasks = {t for t in ALL_TASKS if not CONFIG[t].getboolean("disabled", False)}
+    RELEASE = arguments.release or get_release()
+    DESKTOP = arguments.desktop
 
-needs_desktop = {c for c in ALL_TASKS if CONFIG[c].getboolean("desktop", False)}
-if (len(tasks.intersection(needs_desktop)) > 0) and (arguments.desktop is None):
-    print("this mode requires a desktop argument", file=sys.stderr)
-    parser.print_usage()
-    sys.exit()
+    if any(t not in all_tasks for t in arguments.tasks):
+        print("unknown task", file=sys.stderr)
+        sys.exit()
 
-if arguments.refresh:
-    refresh()
+    tasks = set(arguments.tasks)
+    if len(tasks) == 0:
+        tasks = {t for t in all_tasks if not config[t].getboolean("disabled", False)}
 
-for task, handler in ALL_TASKS.items():
-    if task in tasks:
-        handler(ask=task not in arguments.tasks)
+    needs_desktop = {c for c in all_tasks if config[c].getboolean("desktop", False)}
+    if (len(tasks.intersection(needs_desktop)) > 0) and (arguments.desktop is None):
+        print("this mode requires a desktop argument", file=sys.stderr)
+        parser.print_usage()
+        sys.exit()
 
-if arguments.refresh:
-    upgrade()
+    if arguments.refresh:
+        refresh()
+
+    for task, handler in all_tasks.items():
+        if task in tasks:
+            handler(ask=task not in arguments.tasks)
+
+    if arguments.refresh:
+        upgrade()
+
+
+if __name__ == "__main__":
+    main()

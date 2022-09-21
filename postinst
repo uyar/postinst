@@ -574,6 +574,28 @@ def install_code(*, ask=True):
         refresh(ask=False)
 
 
+def install_insomnia(*, ask=True):
+    logging.info("   -- INSTALLING INSOMNIA")
+    if ask and (not yes_no("install insomnia")):
+        return
+
+    page = "https://github.com/Kong/insomnia/releases"
+    with urlopen(page) as c:
+        content = c.read().decode()
+    match = re.search(r"\n\s+core@([0-9.]+)\n", content)
+    latest = match.group(1)
+
+    if package_version("insomnia") == latest:
+        logging.info("   -- already installed")
+    else:
+        url = "https://updates.insomnia.rest/downloads/ubuntu/latest"
+        filename = f"Insomnia.Core-{latest}.deb"
+        downloaded = DOWNLOADS_DIR / filename
+        if not downloaded.exists():
+            fetch(url, dst=downloaded)
+        run(f"apt install --no-install-recommends {downloaded}", sudo=True)
+
+
 ########################################################
 #                                                      #
 #   MAIN                                               #

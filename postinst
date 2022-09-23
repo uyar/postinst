@@ -60,9 +60,9 @@ def partition(f, xs):
     return list(filter(f, t1)), list(filterfalse(f, t2))
 
 
-def yes_no(prompt, default="y"):
-    legend = "Y/n/q" if default.lower() == "y" else "y/N/q"
-    response = input(f"Do you want to {prompt} ({legend})? ").strip().lower()
+def yes_no(task_desc, default="y"):
+    choices = "Y/n/q" if default.lower() == "y" else "y/N/q"
+    response = input(f"Do you want to {task_desc} ({choices})? ").strip().lower()
     if response == "":
         response = default.lower()
     if response in {"q", "quit"}:
@@ -208,7 +208,7 @@ def add_apt_repo(package, repo, *, repo_key=None):
         else:
             list_file = f"{APT_SRC_DIR}/{package}.list"
             cat(list_file, repo, mode="644", sudo=True)
-            refresh(ask=False)
+            refresh()
 
 
 def add_alternative(generic, name, path, priority):
@@ -222,44 +222,34 @@ def add_alternative(generic, name, path, priority):
 ########################################################
 
 
-def refresh(*, ask=True):
+def refresh():
     logging.info("-- UPDATING PACKAGE DATA")
-    if ask and (not yes_no("update package data")):
-        return
     run("apt update", sudo=True)
 
 
-def upgrade(*, ask=True):
+def upgrade():
     logging.info("-- UPGRADING PACKAGES")
-    if ask and (not yes_no("upgrade all packages")):
-        return
     run("apt upgrade", sudo=True)
 
 
-def install_category(category, *, ask=True):
+def install_category(category):
     logging.info(f"-- INSTALLING CATEGORY: {category.name.upper()}")
-    if ask and (not yes_no(f"install the '{category.name}' category")):
-        return
     packages = category.get("all", "").split()
     if category.getboolean("desktop", False):
         packages.extend(category.get(DESKTOP, "").split())
     install(packages)
 
 
-def uninstall_category(category, *, ask=True):
+def uninstall_category(category):
     logging.info(f"-- UNINSTALLING CATEGORY: {category.name.upper()}")
-    if ask and (not yes_no(f"uninstall the '{category.name}' category")):
-        return
     packages = category.get("all", "").split()
     if category.getboolean("desktop", False):
         packages.extend(category.get(DESKTOP, "").split())
     uninstall(packages)
 
 
-def install_external(package, *, ask=True):
+def install_external(package):
     logging.info(f"-- INSTALLING EXTERNAL PACKAGE: {package.name.upper()}")
-    if ask and (not yes_no(f"install the '{package.name}' package")):
-        return
     repo = package.get("repo", None)
     if repo is None:
         repo = package.get(f"repo.{RELEASE}", None)
@@ -273,11 +263,8 @@ def install_external(package, *, ask=True):
     install([package.name])
 
 
-def install_file(package, *, ask=True):
+def install_file(package):
     logging.info(f"-- INSTALLING FILE PACKAGE: {package.name.upper()}")
-    if ask and (not yes_no(f"install the '{package.name}' package")):
-        return
-
     page = package["page"]
     with urlopen(page) as c:
         content = c.read().decode()
@@ -303,29 +290,25 @@ def install_file(package, *, ask=True):
 ########################################################
 
 
-def install_tr_keymaps(*, ask=True):
+def install_tr_keymaps():
     xkb_dir = Path("/usr/share/X11/xkb")
     xkb_tr = xkb_dir / "symbols" / "tr"
 
     logging.info("   -- CHANGING KEYMAP: TR (SLASH)")
-    if (not ask) or yes_no("change the tr keymap for slash"):
-        if contains("AB10.*slash", xkb_tr):
-            logging.info("   -- already changed")
-        else:
-            patch(xkb_tr, THIS_DIR / "xkb-tr-slash.patch.gz", sudo=True)
+    if contains("AB10.*slash", xkb_tr):
+        logging.info("   -- already changed")
+    else:
+        patch(xkb_tr, THIS_DIR / "xkb-tr-slash.patch.gz", sudo=True)
 
     logging.info("   -- ADDING KEYMAP: TR(TYPEWRITER)")
-    if (not ask) or yes_no("add the tr(typewriter) keymap"):
-        if contains("typewriter", xkb_tr):
-            logging.info("   -- already added")
-        else:
-            patch(xkb_dir, THIS_DIR / "xkb-tr-typewriter.patch.gz", strip=1, sudo=True)
+    if contains("typewriter", xkb_tr):
+        logging.info("   -- already added")
+    else:
+        patch(xkb_dir, THIS_DIR / "xkb-tr-typewriter.patch.gz", strip=1, sudo=True)
 
 
-def install_natural_scrolling(*, ask=True):
+def install_natural_scrolling():
     logging.info("   -- SETTING NATURAL SCROLLING")
-    if ask and (not yes_no("set natural scrolling")):
-        return
     conf_file = Path("/usr/share/X11/xorg.conf.d/40-libinput.conf")
     if contains("NaturalScrolling", conf_file):
         logging.info("   -- already set")
@@ -333,20 +316,16 @@ def install_natural_scrolling(*, ask=True):
         patch(conf_file, THIS_DIR / "libinput.conf.patch.gz", sudo=True)
 
 
-def install_fontconfig_infinality(*, ask=True):
+def install_fontconfig_infinality():
     logging.info("   -- INSTALLING INFINALITY FONTCONFIG")
-    if ask and (not yes_no("install infinality fontconfig")):
-        return
-    # install_external("fontconfig-infinality", ask=ask)
-    install_file("fontconfig-infinality", ask=False)
+    # install_external("fontconfig-infinality")
+    install_file("fontconfig-infinality")
     # FIXME: repeated setstyle
     run("echo 3 | sudo /etc/fonts/infinality/infctl.sh setstyle")
 
 
-def install_typecatcher(*, ask=True):
+def install_typecatcher():
     logging.info("   -- INSTALLING TYPECATCHER")
-    if ask and (not yes_no("install typecatcher")):
-        return
     install(["typecatcher"])
     builder_file = Path("/usr/lib/python3/dist-packages/typecatcher_lib/Builder.py")
     if not contains("tree.getiterator", builder_file):
@@ -355,10 +334,8 @@ def install_typecatcher(*, ask=True):
         run(f"sed -i 's/tree.getiterator/tree.iter/' {builder_file} > /dev/null", sudo=True)
 
 
-def install_hosts(*, ask=True):
+def install_hosts():
     logging.info("   -- INSTALLING HOSTS BLACKLIST")
-    if ask and (not yes_no("install hosts blacklist")):
-        return
     cron_file = Path("/etc/cron.daily/update-hosts")
     if cron_file.exists():
         logging.info("   -- already installed")
@@ -369,10 +346,8 @@ def install_hosts(*, ask=True):
         run(cron_file, sudo=True)
 
 
-def install_tor(*, ask=True):
+def install_tor():
     logging.info("   -- INSTALLING TOR with TINYPROXY")
-    if ask and (not yes_no("install tor")):
-        return
     install(["tor", "tinyproxy"])
     config = Path("/etc/tinyproxy/tinyproxy.conf")
     restart = False
@@ -386,11 +361,8 @@ def install_tor(*, ask=True):
         run("systemctl restart tinyproxy", sudo=True)
 
 
-def install_palemoon(*, ask=True, priority=100):
+def install_palemoon(priority=100):
     logging.info("   -- INSTALLING PALE MOON")
-    if ask and (not yes_no("install palemoon")):
-        return
-
     base_url = "https://linux.palemoon.org/"
     with urlopen(base_url + "download/mainline/") as c:
         content = c.read().decode()
@@ -425,11 +397,8 @@ def install_palemoon(*, ask=True, priority=100):
         copy(THIS_DIR / "palemoon.desktop", menu_file, sudo=True)
 
 
-def install_ungoogled_chromium(*, ask=True, priority=200):
+def install_ungoogled_chromium(priority=200):
     logging.info("   -- INSTALLING UNGOOGLED CHROMIUM")
-    if ask and (not yes_no("install ungoogled chromium")):
-        return
-
     base_url = "https://ungoogled-software.github.io/ungoogled-chromium-binaries/"
     with urlopen(base_url) as c:
         content = c.read().decode()
@@ -470,21 +439,17 @@ def install_ungoogled_chromium(*, ask=True, priority=200):
         copy(THIS_DIR / "ungoogled-chromium.desktop", menu_file, sudo=True)
 
 
-def install_dropbox(*, ask=True):
+def install_dropbox():
     logging.info("   -- INSTALLING DROPBOX")
-    if ask and (not yes_no("install dropbox")):
-        return
     install(["python3-gpg"])
-    install_file("dropbox", ask=False)
+    install_file("dropbox")
     apt_file = APT_SRC_DIR / "dropbox.list"
     if apt_file.exists() and contains('^deb', apt_file):
         run(f"sed -i 's/^deb/# deb/' {apt_file}", sudo=True)
 
 
-def install_wormhole_william(*, ask=True):
+def install_wormhole_william():
     logging.info("   -- INSTALLING WORMHOLE WILLIAM")
-    if ask and (not yes_no("install wormhole-william")):
-        return
     url = "https://github.com/psanford/wormhole-william"
     with urlopen(url) as c:
         content = c.read().decode()
@@ -502,10 +467,8 @@ def install_wormhole_william(*, ask=True):
         copy(downloaded, executable, mode="755", sudo=True)
 
 
-def install_youtube_dl(*, ask=True):
+def install_youtube_dl():
     logging.info("   -- INSTALLING YOUTUBE-DL")
-    if ask and (not yes_no("install youtube-dl")):
-        return
     executable = EXEC_DIR / "youtube-dl"
     if executable.exists():
         logging.info("   -- already installed, checking for updates")
@@ -515,10 +478,8 @@ def install_youtube_dl(*, ask=True):
         fetch(url, dst=executable, mode="755", sudo=True)
 
 
-def install_split2flac(*, ask=True):
+def install_split2flac():
     logging.info("   -- INSTALLING SPLIT2FLAC")
-    if ask and (not yes_no("install split2flac")):
-        return
     url = "https://raw.githubusercontent.com/ftrvxmtrx/split2flac/master/split2flac"
     with urlopen(url) as c:
         content = c.read().decode()
@@ -539,10 +500,8 @@ def install_split2flac(*, ask=True):
         copy(executable, split2mp3, link=True, sudo=True)
 
 
-def install_yq(*, ask=True):
+def install_yq():
     logging.info("   -- INSTALLING YQ")
-    if ask and (not yes_no("install yq")):
-        return
     url = "https://github.com/mikefarah/yq"
     with urlopen(url) as c:
         content = c.read().decode()
@@ -560,25 +519,20 @@ def install_yq(*, ask=True):
         copy(downloaded, executable, mode="755", sudo=True)
 
 
-def install_code(*, ask=True):
+def install_code():
     logging.info("   -- INSTALLING VISUAL STUDIO CODE")
-    if ask and (not yes_no("install vscode")):
-        return
-    install_external("code", ask=False)
+    install_external("code")
     gpg_file = APT_GPG_DIR / "code.gpg"
     if gpg_file.exists():
         run(f"rm -f {gpg_file}", sudo=True)
     list_file = APT_SRC_DIR / "code.list"
     if list_file.exists():
         run(f"rm -f {list_file}", sudo=True)
-        refresh(ask=False)
+        refresh()
 
 
-def install_insomnia(*, ask=True):
+def install_insomnia():
     logging.info("   -- INSTALLING INSOMNIA")
-    if ask and (not yes_no("install insomnia")):
-        return
-
     page = "https://github.com/Kong/insomnia/releases"
     with urlopen(page) as c:
         content = c.read().decode()
@@ -675,7 +629,10 @@ def main():
 
     for task, handler in all_tasks.items():
         if task in tasks:
-            handler(ask=task not in arguments.tasks)
+            task_desc = config[task].get("desc", f"install {task}")
+            if (task not in arguments.tasks) and (not yes_no(task_desc)):
+                continue
+            handler()
 
     if arguments.refresh:
         upgrade()

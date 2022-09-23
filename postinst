@@ -260,11 +260,16 @@ def install_external(package):
     if key is None:
         key = package.get(f"key.{RELEASE}", None)
     add_apt_repo(package.name, repo, repo_key=key)
-    install([package.name])
+    packages = package.get("all", package.name).split()
+    install(packages)
 
 
 def install_file(package):
     logging.info(f"-- INSTALLING FILE PACKAGE: {package.name.upper()}")
+
+    prereqs = [p for p in package.get("all", "").split() if p != package.name]
+    install(prereqs)
+
     page = package["page"]
     with urlopen(page) as c:
         content = c.read().decode()
@@ -316,17 +321,14 @@ def install_natural_scrolling():
         patch(conf_file, THIS_DIR / "libinput.conf.patch.gz", sudo=True)
 
 
-def install_fontconfig_infinality():
-    logging.info("   -- INSTALLING INFINALITY FONTCONFIG")
-    # install_external("fontconfig-infinality")
-    install_file("fontconfig-infinality")
+def postinstall_fontconfig_infinality():
+    logging.info("   -- SETTING INFINALITY FONTCONFIG STYLE")
     # FIXME: repeated setstyle
     run("echo 3 | sudo /etc/fonts/infinality/infctl.sh setstyle")
 
 
-def install_typecatcher():
-    logging.info("   -- INSTALLING TYPECATCHER")
-    install(["typecatcher"])
+def postinstall_typecatcher():
+    logging.info("   -- FIXING TYPECATCHER")
     builder_file = Path("/usr/lib/python3/dist-packages/typecatcher_lib/Builder.py")
     if not contains("tree.getiterator", builder_file):
         logging.info("   -- already fixed")
@@ -439,10 +441,8 @@ def install_ungoogled_chromium(priority=200):
         copy(THIS_DIR / "ungoogled-chromium.desktop", menu_file, sudo=True)
 
 
-def install_dropbox():
-    logging.info("   -- INSTALLING DROPBOX")
-    install(["python3-gpg"])
-    install_file("dropbox")
+def postinstall_dropbox():
+    logging.info("   -- FIXING DROPBOX REPO DATA")
     apt_file = APT_SRC_DIR / "dropbox.list"
     if apt_file.exists() and contains('^deb', apt_file):
         run(f"sed -i 's/^deb/# deb/' {apt_file}", sudo=True)
@@ -519,9 +519,8 @@ def install_yq():
         copy(downloaded, executable, mode="755", sudo=True)
 
 
-def install_code():
-    logging.info("   -- INSTALLING VISUAL STUDIO CODE")
-    install_external("code")
+def postinstall_code():
+    logging.info("   -- FIXING VISUAL STUDIO CODE REPO DATA")
     gpg_file = APT_GPG_DIR / "code.gpg"
     if gpg_file.exists():
         run(f"rm -f {gpg_file}", sudo=True)
@@ -632,7 +631,16 @@ def main():
             task_desc = config[task].get("desc", f"install {task}")
             if (task not in arguments.tasks) and (not yes_no(task_desc)):
                 continue
+
+            prehook = globals().get(f"preinstall_{task.replace('-', '_')}")
+            if prehook is not None:
+                prehook()
+
             handler()
+
+            posthook = globals().get(f"postinstall_{task.replace('-', '_')}")
+            if posthook is not None:
+                posthook()
 
     if arguments.refresh:
         upgrade()

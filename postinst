@@ -13,11 +13,11 @@ from urllib.parse import urljoin
 from urllib.request import urlopen
 
 
-__version__ = "2022.09.11"
+__version__ = "2022.11.02"
 
 
 DRY_RUN = False
-VERBOSE = False
+ECHO = False
 RELEASE = None
 DESKTOP = None
 
@@ -76,9 +76,9 @@ def run(command, *, sudo=False):
     logging.info(f"{command}")
     if DRY_RUN:
         return
-    process = subprocess.run(command, shell=True, capture_output=not VERBOSE)
+    process = subprocess.run(command, shell=True, capture_output=not ECHO)
     if process.returncode != 0:
-        raise RuntimeError(process.stderr if not VERBOSE else "")
+        raise RuntimeError(process.stderr if not ECHO else "")
 
 
 def contains(pattern, files):
@@ -564,7 +564,7 @@ def make_parser(task_names):
     parser.add_argument("-r", "--release", help="release", choices=["jammy"])
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--dry-run", action="store_true", dest="dry_run")
-    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("-e", "--echo", action="store_true")
     parser.add_argument("tasks", nargs="*",
                         help="task(s) to execute: " + ",".join(task_names))
     return parser
@@ -576,7 +576,7 @@ def make_parser(task_names):
 
 def main():
     global DRY_RUN
-    global VERBOSE
+    global ECHO
     global RELEASE
     global DESKTOP
 
@@ -604,7 +604,7 @@ def main():
     arguments = parser.parse_args(sys.argv[1:])
 
     DRY_RUN = arguments.dry_run
-    VERBOSE = arguments.verbose
+    ECHO = arguments.echo
 
     RELEASE = arguments.release or get_release()
     DESKTOP = arguments.desktop

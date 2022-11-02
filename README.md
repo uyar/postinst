@@ -13,7 +13,7 @@ postinst natural-scrolling typecatcher
 If run without parameters, it will run all tasks in interactive mode.
 
 The list of available task names can be printed using the `--help` option.
-The `-v` option will display the operations carried out by a task.
+The `-e` option will display the operations carried out by a task.
 The `--dry-run` will just explain the steps but not execute them.
 
 The operations for the tasks are taken from the `tasks.ini` file in the current directory.

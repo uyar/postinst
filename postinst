@@ -10,10 +10,9 @@ from functools import partial
 from itertools import filterfalse, tee
 from pathlib import Path
 from urllib.parse import urljoin
-from urllib.request import urlopen
 
 
-__version__ = "2022.11.02"
+__version__ = "2022.11.28"
 
 
 DRY_RUN = False
@@ -133,6 +132,11 @@ def fetch(url, dst, *, gpg=False, mode=None, sudo=False):
         run(f"{command1} | {command2}")
     if mode is not None:
         run(f"chmod {mode} {dst}", sudo=sudo)
+
+
+def urlread(url):
+    p = subprocess.run(["curl", url], capture_output=True)
+    return p.stdout.decode()
 
 
 def local_version(executable, prefix=""):
@@ -268,20 +272,25 @@ def install_file(package):
     logging.info(f"-- INSTALLING FILE PACKAGE: {package.name.upper()}")
 
     prereqs = [p for p in package.get("all", "").split() if p != package.name]
-    install(prereqs)
+    if len(prereqs) > 0:
+        install(prereqs)
 
     page = package["page"]
-    with urlopen(page) as c:
-        content = c.read().decode()
+    content = urlread(page)
 
-    regex = package["regex"]
-    match = re.search(regex, content)
-    route, filename, latest = match.groups()
-    url = urljoin(page, route)
-
+    matched = re.search(package["regex"], content)
+    route, *middle, latest = matched.groups()
     if package_version(package.name) == latest:
         logging.info("   -- already installed")
     else:
+        template = package.get("template", route)
+        url = template % {"release": latest}
+        if not url.startswith("http"):
+            url = urljoin(page, url)
+        if len(middle) == 0:
+            filename = url.split("/")[-1]
+        else:
+            filename = middle[0]
         downloaded = DOWNLOADS_DIR / filename
         if not downloaded.exists():
             fetch(url, dst=downloaded)
@@ -366,10 +375,9 @@ def install_tor():
 def install_palemoon(priority=100):
     logging.info("   -- INSTALLING PALE MOON")
     base_url = "https://linux.palemoon.org/"
-    with urlopen(base_url + "download/mainline/") as c:
-        content = c.read().decode()
-    match = re.search(r'href="(.*/(palemoon-([0-9.]+)\.linux-x86_64-gtk3\.tar\.xz))"', content)
-    route, filename, latest = match.groups()
+    content = urlread(base_url + "download/mainline/")
+    matched = re.search(r'href="(.*/(palemoon-([0-9.]+)\.linux-x86_64-gtk3\.tar\.xz))"', content)
+    route, filename, latest = matched.groups()
 
     app_dir = OPT_DIR / "palemoon"
     if app_dir.exists():
@@ -402,10 +410,9 @@ def install_palemoon(priority=100):
 def install_ungoogled_chromium(priority=200):
     logging.info("   -- INSTALLING UNGOOGLED CHROMIUM")
     base_url = "https://ungoogled-software.github.io/ungoogled-chromium-binaries/"
-    with urlopen(base_url) as c:
-        content = c.read().decode()
-    match = re.search(r"/(releases/linux_portable/64bit/([0-9.]+)(-[0-9]+)?)", content)
-    route, latest, _ = match.groups()
+    content = urlread(base_url)
+    matched = re.search(r"/(releases/linux_portable/64bit/([0-9.]+)(-[0-9]+)?)", content)
+    route, latest, _ = matched.groups()
 
     app_dir = OPT_DIR / "ungoogled-chromium"
     if app_dir.exists():
@@ -416,10 +423,9 @@ def install_ungoogled_chromium(priority=200):
             logging.info("   -- already extracted")
 
     if not app_dir.exists():
-        with urlopen(f"{base_url}{route}") as c:
-            content = c.read().decode()
-        match = re.search(r'href="(https://.*/(ungoogled-chromium.*\.tar\.xz))"', content)
-        url, filename = match.groups()
+        content = urlread(f"{base_url}{route}")
+        matched = re.search(r'href="(https://.*/(ungoogled-chromium.*\.tar\.xz))"', content)
+        url, filename = matched.groups()
         downloaded = DOWNLOADS_DIR / filename
         if not downloaded.exists():
             fetch(url, dst=downloaded)
@@ -451,10 +457,9 @@ def postinstall_dropbox():
 def install_wormhole_william():
     logging.info("   -- INSTALLING WORMHOLE WILLIAM")
     url = "https://github.com/psanford/wormhole-william"
-    with urlopen(url) as c:
-        content = c.read().decode()
-    match = re.search(r"/releases/tag/v([0-9.]+)", content)
-    latest = match.group(1)
+    content = urlread(url)
+    matched = re.search(r"/releases/tag/v([0-9.]+)", content)
+    latest = matched.group(1)
 
     executable = EXEC_DIR / "wormhole-william"
     if local_version(executable, prefix="v") == latest:
@@ -481,10 +486,9 @@ def install_youtube_dl():
 def install_split2flac():
     logging.info("   -- INSTALLING SPLIT2FLAC")
     url = "https://raw.githubusercontent.com/ftrvxmtrx/split2flac/master/split2flac"
-    with urlopen(url) as c:
-        content = c.read().decode()
-    match = re.search(r"VERSION=([0-9]+)", content)
-    latest = match.group(1)
+    content = urlread(url)
+    matched = re.search(r"VERSION=([0-9]+)", content)
+    latest = matched.group(1)
     downloaded = DOWNLOADS_DIR / f"split2flac-{latest}"
     if not downloaded.exists():
         # TODO: don't fetch a second time
@@ -503,13 +507,12 @@ def install_split2flac():
 def install_yq():
     logging.info("   -- INSTALLING YQ")
     url = "https://github.com/mikefarah/yq"
-    with urlopen(url) as c:
-        content = c.read().decode()
-    match = re.search(r"/releases/tag/v([0-9.]+)", content)
-    latest = match.group(1)
+    content = urlread(url)
+    matched = re.search(r"/releases/tag/v([0-9.]+)", content)
+    latest = matched.group(1)
 
     executable = EXEC_DIR / "yq"
-    if local_version(executable) == latest:
+    if local_version(executable, prefix="v") == latest:
         logging.info("   -- already installed")
     else:
         url = f"{url}/releases/download/v{latest}/yq_linux_amd64"
@@ -528,25 +531,6 @@ def postinstall_code():
     if list_file.exists():
         run(f"rm -f {list_file}", sudo=True)
         refresh()
-
-
-def install_insomnia():
-    logging.info("   -- INSTALLING INSOMNIA")
-    page = "https://github.com/Kong/insomnia/releases"
-    with urlopen(page) as c:
-        content = c.read().decode()
-    match = re.search(r"\n\s+core@([0-9.]+)\n", content)
-    latest = match.group(1)
-
-    if package_version("insomnia") == latest:
-        logging.info("   -- already installed")
-    else:
-        url = "https://updates.insomnia.rest/downloads/ubuntu/latest"
-        filename = f"Insomnia.Core-{latest}.deb"
-        downloaded = DOWNLOADS_DIR / filename
-        if not downloaded.exists():
-            fetch(url, dst=downloaded)
-        run(f"apt install --no-install-recommends {downloaded}", sudo=True)
 
 
 ########################################################

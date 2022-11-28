@@ -1,6 +1,7 @@
 # postinst
 
-`postinst` is a script for carrying out custom postinstallation tasks after an Ubuntu/Mint installation.
+`postinst` is a script for carrying out custom postinstallation tasks
+after an Ubuntu/Mint installation.
 
 It takes one or more task names as its parameter:
 
@@ -16,8 +17,10 @@ The list of available task names can be printed using the `--help` option.
 The `-e` option will display the operations carried out by a task.
 The `--dry-run` will just explain the steps but not execute them.
 
-The operations for the tasks are taken from the `tasks.ini` file in the current directory.
-Some of the tasks depend on the targeted desktop (like "lxqt") or release (like "jammy").
+The operations for the tasks are taken from the `tasks.ini` file
+in the current directory.
+Some of the tasks depend on the targeted desktop (like "lxqt")
+or release (like "jammy").
 The desktop and release can be provided as command-line arguments.
 
 There is one section per task in this file.
@@ -26,7 +29,8 @@ Each section has an action which describes the operation:
 * `install_category`: Install a set of packages.
 
   The packages that are listed in the `all` key will be installed using `apt`.
-  If the `desktop` key is set to true, also the packages under the corresponding desktop key will be installed.
+  If the `desktop` key is set to true, also the packages
+  under the corresponding desktop key will be installed.
 
   Example:
 
@@ -43,8 +47,10 @@ Each section has an action which describes the operation:
 
 * `uninstall_category`: Uninstall a set of packages.
 
-  The packages that are listed in the `all` key will be uninstalled using `apt`.
-  If the `desktop` key is set to true, also the packages under the corresponding desktop key will be uninstalled.
+  The packages that are listed in the `all` key will be uninstalled
+  using `apt`.
+  If the `desktop` key is set to true, also the packages
+  under the corresponding desktop key will be uninstalled.
 
   Example:
 
@@ -59,11 +65,15 @@ Each section has an action which describes the operation:
 
   The section name must match the name of the package.
 
-  This action requires a `repo` key which is either a PPA, or the contents of a `/etc/apt/sources.list.d` entry.
-  There can also be a `key` key as the contents of a `/etc/apt/trusted.gpg.d` entry.
-  Both of these keys can be suffixed with the release name (as in `repo.jammy` or `key.jammy`)
+  This action requires a `repo` key which is either a PPA,
+  or the contents of a `/etc/apt/sources.list.d` entry.
+  There can also be a `key` key as the contents
+  of a `/etc/apt/trusted.gpg.d` entry.
+  Both of these keys can be suffixed with the release name
+  (as in `repo.jammy` or `key.jammy`)
   in order to restrain the use of that repo that that release.
-  The file names for the sources and key entries will be generated using the package/section name.
+  The file names for the sources and key entries will be generated
+  using the package/section name.
 
   Example:
 
@@ -80,7 +90,8 @@ Each section has an action which describes the operation:
 
 * `install_file`: Install a `.deb` file.
 
-  This action requires a page URL that contains the download URL to the `.deb` file
+  This action requires a page URL that contains the download URL
+  for the `.deb` file
   and a regex to extract that URL.
 
   The section name must match the name of the package.
@@ -105,11 +116,14 @@ Each section has an action which describes the operation:
   ```
 
 Tasks can be disabled by setting the `disabled` key to true.
-If disabled, the task will be skipped in the script is run without specific tasks.
-If the script is run with a specific task as parameter, the `disabled` key will have no effect.
+If disabled, the task will be skipped if the script is run
+without specific tasks.
+If the script is run with a specific task as parameter,
+the `disabled` key will have no effect.
 
 All other keys will be ignored.
 These can be used for note taking or other purposes.
 
-Note: The actions are written so that running them multiple times will not cause any problems or repeated effects.
-Custom action functions should also try to achieve this goal.
+*Note*: The actions are written so that running them multiple times
+will not cause any problems or repeated effects (idempotance).
+Custom action functions should also aim to achieve this goal.

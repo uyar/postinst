@@ -14,8 +14,8 @@ postinst natural-scrolling typecatcher
 If run without parameters, it will run all tasks in interactive mode.
 
 The list of available task names can be printed using the `--help` option.
-The `-e` option will display the operations carried out by a task.
-The `--dry-run` will just explain the steps but not execute them.
+The `-e` option (echo) will display the operations carried out by a task.
+The `--dry-run` option will just explain the steps but not execute them.
 
 The operations for the tasks are taken from the `tasks.ini` file
 in the current directory.
@@ -28,7 +28,8 @@ Each section has an action which describes the operation:
 
 * `install_category`: Install a set of packages.
 
-  The packages that are listed in the `all` key will be installed using `apt`.
+  The packages that are listed in the `all` key will be installed
+  using `apt install --no-install-recommends`.
   If the `desktop` key is set to true, also the packages
   under the corresponding desktop key will be installed.
 
@@ -48,7 +49,7 @@ Each section has an action which describes the operation:
 * `uninstall_category`: Uninstall a set of packages.
 
   The packages that are listed in the `all` key will be uninstalled
-  using `apt`.
+  using `apt purge --auto-remove`.
   If the `desktop` key is set to true, also the packages
   under the corresponding desktop key will be uninstalled.
 
@@ -57,7 +58,6 @@ Each section has an action which describes the operation:
   ```
   [unwanted]
   action = uninstall_category
-  desktop = true
   all = snapd
   ```
 
@@ -71,7 +71,7 @@ Each section has an action which describes the operation:
   of a `/etc/apt/trusted.gpg.d` entry.
   Both of these keys can be suffixed with the release name
   (as in `repo.jammy` or `key.jammy`)
-  in order to restrain the use of that repo that that release.
+  in order to restrain the use of that repo to that release.
   The file names for the sources and key entries will be generated
   using the package/section name.
 
@@ -105,15 +105,19 @@ Each section has an action which describes the operation:
   regex = href="(.*(drawio-amd64-([0-9.]+)\.deb))"
   ```
 
-  All of these actions are functions in the `postinst` script.
-  Custom actions can be added to the script as functions and listed as actions.
+  In the regex, the first group should give the download URL,
+  the second group the filename for the download,
+  and the third group the version number.
 
-  Example:
+All of these actions are functions in the `postinst` script.
+Custom actions can be added to the script as functions and listed as actions.
 
-  ```
-  [natural-scrolling]
-  action = install_natural_scrolling
-  ```
+Example:
+
+```
+[natural-scrolling]
+action = install_natural_scrolling
+```
 
 Tasks can be disabled by setting the `disabled` key to true.
 If disabled, the task will be skipped if the script is run

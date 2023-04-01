@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+__version__ = "2023.04.01"
+
 import logging
 import re
 import subprocess
@@ -10,10 +12,6 @@ from functools import partial
 from itertools import filterfalse, tee
 from pathlib import Path
 from urllib.parse import urljoin
-
-
-__version__ = "2022.11.28"
-
 
 DRY_RUN = False
 ECHO = False
@@ -64,7 +62,8 @@ def partition(f, xs):
 
 def yes_no(task_desc, default="y"):
     choices = "Y/n/q" if default.lower() == "y" else "y/N/q"
-    response = input(f"Do you want to {task_desc} ({choices})? ").strip().lower()
+    prompt = f"Do you want to {task_desc} ({choices})? "
+    response = input(prompt).strip().lower()
     if response == "":
         response = default.lower()
     if response in {"q", "quit"}:

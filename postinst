@@ -29,7 +29,10 @@ DESKTOP = None
 
 
 THIS_DIR = Path(__file__).parent
-DOWNLOADS_DIR = THIS_DIR / "downloads"
+PATCHES_DIR = THIS_DIR / "patches"
+SCRIPTS_DIR = THIS_DIR / "scripts"
+DESKTOP_DIR = THIS_DIR / "desktop"
+DOWNLOADS_DIR = THIS_DIR / "DOWNLOADS"
 
 INST_DIR = Path("/usr")
 EXEC_DIR = INST_DIR / "bin"
@@ -312,13 +315,13 @@ def install_tr_keymaps():
     if contains("AB10.*slash", xkb_tr):
         logging.info("   -- already changed")
     else:
-        patch(xkb_tr, THIS_DIR / "xkb-tr-slash.patch.gz", sudo=True)
+        patch(xkb_tr, PATCHES_DIR / "xkb-tr-slash.patch.gz", sudo=True)
 
     logging.info("   -- ADDING KEYMAP: TR(TYPEWRITER)")
     if contains("typewriter", xkb_tr):
         logging.info("   -- already added")
     else:
-        patch(xkb_dir, THIS_DIR / "xkb-tr-typewriter.patch.gz", strip=1, sudo=True)
+        patch(xkb_dir, PATCHES_DIR / "xkb-tr-typewriter.patch.gz", strip=1, sudo=True)
 
 
 def install_natural_scrolling():
@@ -327,7 +330,7 @@ def install_natural_scrolling():
     if contains("NaturalScrolling", conf_file):
         logging.info("   -- already set")
     else:
-        patch(conf_file, THIS_DIR / "libinput.conf.patch.gz", sudo=True)
+        patch(conf_file, PATCHES_DIR / "libinput.conf.patch.gz", sudo=True)
 
 
 def postinstall_fontconfig_infinality():
@@ -352,7 +355,7 @@ def install_hosts():
         logging.info("   -- already installed")
     else:
         install(["python3-lxml", "python3-bs4"])
-        copy(THIS_DIR / "update-hosts", cron_file, mode="755", sudo=True)
+        copy(SCRIPTS_DIR / "update-hosts", cron_file, mode="755", sudo=True)
     if not Path("/var/local/hosts").exists():
         run(cron_file, sudo=True)
 
@@ -404,7 +407,7 @@ def install_palemoon(priority=100):
 
     menu_file = MENU_DIR / "palemoon.desktop"
     if not menu_file.exists():
-        copy(THIS_DIR / "palemoon.desktop", menu_file, sudo=True)
+        copy(DESKTOP_DIR / "palemoon.desktop", menu_file, sudo=True)
 
 
 def install_ungoogled_chromium(priority=200):
@@ -444,7 +447,7 @@ def install_ungoogled_chromium(priority=200):
 
     menu_file = MENU_DIR / "chromium.desktop"
     if not menu_file.exists():
-        copy(THIS_DIR / "ungoogled-chromium.desktop", menu_file, sudo=True)
+        copy(DESKTOP_DIR / "ungoogled-chromium.desktop", menu_file, sudo=True)
 
 
 def postinstall_dropbox():

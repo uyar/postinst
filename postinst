@@ -474,14 +474,14 @@ def install_wormhole_william():
         copy(downloaded, executable, mode="755", sudo=True)
 
 
-def install_youtube_dl():
-    logging.info("   -- INSTALLING YOUTUBE-DL")
-    executable = EXEC_DIR / "youtube-dl"
+def install_yt_dlp():
+    logging.info("   -- INSTALLING YT-DLP")
+    executable = EXEC_DIR / "yt-dlp"
     if executable.exists():
         logging.info("   -- already installed, checking for updates")
-        run("youtube-dl -U", sudo=True)
+        run("yt-dlp -U", sudo=True)
     else:
-        url = "https://yt-dl.org/downloads/latest/youtube-dl"
+        url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
         fetch(url, dst=executable, mode="755", sudo=True)
 
 

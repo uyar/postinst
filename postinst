@@ -119,7 +119,7 @@ def copy(src, dst, *, move=False, link=False, mode=None, sudo=False):
 
 
 def extract(archive, dst, *, sudo=False):
-    command = f"tar -x --no-same-owner -C {dst} --file {archive}"
+    command = f"tar x --no-same-owner -C {dst} --file {archive}"
     run(command, sudo=sudo)
 
 

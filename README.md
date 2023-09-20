@@ -78,14 +78,14 @@ Each section has an action which describes the operation:
   Example:
 
   ```
-  [foliate]
+  [seergdb]
   action = install_external
-  repo = ppa:apandada1/foliate
+  repo = ppa:htuyar/tekir
 
-  [element-desktop]
+  [signal-desktop]
   action = install_external
-  repo = deb https://packages.riot.im/debian/ default main
-  key = https://packages.riot.im/debian/riot-im-archive-keyring.gpg
+  repo = deb [arch=amd64] https://updates.signal.org/desktop/apt xenial main
+  key = https://updates.signal.org/desktop/apt/keys.asc
   ```
 
 * `install_file`: Install a `.deb` file.

@@ -281,10 +281,14 @@ def install_file(package):
     content = urlread(page)
 
     matched = re.search(package["regex"], content)
+    if not matched:
+        logging.info("   -- failed to get release number")
+        return
     route, *middle, latest = matched.groups()
     if package_version(package.name) == latest:
         logging.info("   -- already installed")
     else:
+        logging.info(f"   -- new release: {latest}")
         template = package.get("template", route)
         url = template % {"release": latest}
         if not url.startswith("http"):

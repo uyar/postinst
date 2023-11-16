@@ -281,10 +281,14 @@ def install_file(package):
     content = urlread(page)
 
     matched = re.search(package["regex"], content)
+    if not matched:
+        logging.info("   -- failed to get release number")
+        return
     route, *middle, latest = matched.groups()
     if package_version(package.name) == latest:
         logging.info("   -- already installed")
     else:
+        logging.info(f"   -- new release: {latest}")
         template = package.get("template", route)
         url = template % {"release": latest}
         if not url.startswith("http"):
@@ -410,27 +414,31 @@ def install_palemoon(priority=100):
 
 
 def install_ungoogled_chromium(priority=200):
-    logging.info("   -- INSTALLING UNGOOGLED CHROMIUM")
+    logging.info("-- INSTALLING UNGOOGLED CHROMIUM")
     base_url = "https://ungoogled-software.github.io/ungoogled-chromium-binaries/"
     content = urlread(base_url)
     matched = re.search(r"/(releases/linux_portable/64bit/([0-9.]+)(-[0-9]+)?)", content)
+    if not matched:
+        logging.info("   -- failed to get release number")
+        return
     route, latest, _ = matched.groups()
+    logging.info(f"   -- new release: {latest}")
 
     app_dir = OPT_DIR / "ungoogled-chromium"
-    if app_dir.exists():
-        if local_version(app_dir / "chrome") != latest:
-            logging.info("   -- old version, removing")
-            run(f"rm -rf {app_dir}", sudo=True)
-        else:
-            logging.info("   -- already extracted")
-
-    if not app_dir.exists():
+    if app_dir.exists() and (local_version(app_dir / "chrome") == latest):
+        logging.info("   -- already extracted")
+    else:
         content = urlread(f"{base_url}{route}")
         matched = re.search(r'href="(https://.*/(ungoogled-chromium.*\.tar\.xz))"', content)
+        if not matched:
+            logging.info("   -- failed to get download link")
+            return
         url, filename = matched.groups()
         downloaded = DOWNLOADS_DIR / filename
         if not downloaded.exists():
             fetch(url, dst=downloaded)
+        logging.info("   -- old version, removing")
+        run(f"rm -rf {app_dir}", sudo=True)
         extract(downloaded, app_dir.parent, sudo=True)
         run(f"mv {app_dir}* {app_dir}", sudo=True)
 
@@ -457,7 +465,7 @@ def postinstall_dropbox():
 
 
 def install_wormhole_william():
-    logging.info("   -- INSTALLING WORMHOLE WILLIAM")
+    logging.info("-- INSTALLING WORMHOLE WILLIAM")
     url = "https://github.com/psanford/wormhole-william"
     content = urlread(url)
     matched = re.search(r"/releases/tag/v([0-9.]+)", content)
@@ -475,7 +483,7 @@ def install_wormhole_william():
 
 
 def install_yt_dlp():
-    logging.info("   -- INSTALLING YT-DLP")
+    logging.info("-- INSTALLING YT-DLP")
     executable = EXEC_DIR / "yt-dlp"
     if executable.exists():
         logging.info("   -- already installed, checking for updates")
@@ -507,7 +515,7 @@ def install_split2flac():
 
 
 def install_yq():
-    logging.info("   -- INSTALLING YQ")
+    logging.info("-- INSTALLING YQ")
     url = "https://github.com/mikefarah/yq"
     content = urlread(url)
     matched = re.search(r"/releases/tag/v([0-9.]+)", content)

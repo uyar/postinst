@@ -422,12 +422,12 @@ def install_ungoogled_chromium(priority=200):
         logging.info("   -- failed to get release number")
         return
     route, latest, _ = matched.groups()
-    logging.info(f"   -- new release: {latest}")
 
     app_dir = OPT_DIR / "ungoogled-chromium"
     if app_dir.exists() and (local_version(app_dir / "chrome") == latest):
         logging.info("   -- already extracted")
     else:
+        logging.info(f"   -- new release: {latest}")
         content = urlread(f"{base_url}{route}")
         matched = re.search(r'href="(https://.*/(ungoogled-chromium.*\.tar\.xz))"', content)
         if not matched:

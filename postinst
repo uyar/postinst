@@ -41,6 +41,7 @@ OPT_DIR = Path("/opt")
 APT_DIR = Path("/etc/apt")
 APT_SRC_DIR = APT_DIR / "sources.list.d"
 APT_GPG_DIR = APT_DIR / "trusted.gpg.d"
+APT_PREF_DIR = APT_DIR / "preferences.d"
 
 
 ########################################################
@@ -88,7 +89,7 @@ def contains(pattern, files):
 
 
 def cat(path, content, *, append=False, mode=None, sudo=False):
-    command1 = f"echo {content}"
+    command1 = f'echo "{content}"'
     command2 = f"tee {path}" if not append else f"tee -a {path}"
     if sudo:
         command2 = f"sudo {command2}"
@@ -411,6 +412,15 @@ def install_palemoon(priority=100):
     menu_file = MENU_DIR / "palemoon.desktop"
     if not menu_file.exists():
         copy(DESKTOP_DIR / "palemoon.desktop", menu_file, sudo=True)
+
+
+def preinstall_firefox():
+    logging.info("-- PINNING MOZILLA REPO")
+    pref_file = APT_PREF_DIR / "mozilla"
+    if not pref_file.exists():
+        cat(pref_file, "Package: *", sudo=True)
+        cat(pref_file, "Pin: origin packages.mozilla.org", append=True, sudo=True)
+        cat(pref_file, "Pin-Priority: 1000", append=True, sudo=True)
 
 
 def install_ungoogled_chromium(priority=200):
